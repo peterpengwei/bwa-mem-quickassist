@@ -45,6 +45,7 @@ int main_mem(int argc, char *argv[])
 		else if (c == 'T') opt->T = atoi(optarg), opt0.T = 1;
 		else if (c == 'U') opt->pen_unpaired = atoi(optarg), opt0.pen_unpaired = 1;
 		else if (c == 't') opt->n_threads = atoi(optarg), opt->n_threads = opt->n_threads > 1? opt->n_threads : 1;
+		else if (c == 'b') opt->batch_size = atoi(optarg), opt->batch_size = opt->batch_size > 1? opt->batch_size : 1; // [QA] assign batch size
 		else if (c == 'P') opt->flag |= MEM_F_NOPAIRING;
 		else if (c == 'a') opt->flag |= MEM_F_ALL;
 		else if (c == 'p') opt->flag |= MEM_F_PE;

@@ -65,6 +65,7 @@ mem_opt_t *mem_opt_init()
 	o->split_factor = 1.5;
 	o->chunk_size = 10000000;
 	o->n_threads = 1;
+	o->batch_size = 1; // [QA] initialize batch size
 	o->max_matesw = 100;
 	o->mask_level_redun = 0.95;
 	o->mapQ_coef_len = 50; o->mapQ_coef_fac = log(o->mapQ_coef_len);
@@ -1045,6 +1046,17 @@ static void worker1(void *data, int i, int tid)
 	}
 }
 
+// [QA] The batched-processing version of worker1
+static void worker1_batched(void *data, int start, int batch_size, int tid)
+{
+	worker_t *w = (worker_t*)data;
+	int i = -1;
+	for (i=start; i<start+batch_size; i++) {
+		if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
+		w->regs[i] = mem_align1_core(w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq);
+	}
+}
+
 static void worker2(void *data, int i, int tid)
 {
 	extern int mem_sam_pe(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pac, const mem_pestat_t pes[4], uint64_t id, bseq1_t s[2], mem_alnreg_v a[2]);
@@ -1063,7 +1075,8 @@ static void worker2(void *data, int i, int tid)
 
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
-	extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
+	//extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
+	extern void kt_for_batch(int n_threads, void (*func)(void*,int,int,int), void *data, int n, int batch_size); // [QA] new kt_for for batch processing
 	worker_t w;
 	mem_alnreg_v *regs;
 	mem_pestat_t pes[4];
@@ -1074,7 +1087,9 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 	w.opt = opt; w.bwt = bwt; w.bns = bns; w.pac = pac;
 	w.seqs = seqs; w.regs = regs; w.n_processed = n_processed;
 	w.pes = &pes[0];
-	kt_for(opt->n_threads, worker1, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // find mapping positions
+	//kt_for(opt->n_threads, worker1, &w, (opt->flag&MEM_F_PE)? n>>1 : n); // find mapping positions
+	//[QA] the batched-processing version of worker1(...)
+	kt_for_batch(opt->n_threads, worker1_batched, &w, n, opt->batch_size); // find mapping positions
 	if (opt->flag&MEM_F_PE) { // infer insert sizes if not provided
 		if (pes0) memcpy(pes, pes0, 4 * sizeof(mem_pestat_t)); // if pes0 != NULL, set the insert-size distribution as pes0
 		else mem_pestat(opt, bns->l_pac, n, regs, pes); // otherwise, infer the insert size distribution from data

@@ -35,6 +35,7 @@ typedef struct {
 	int max_occ;            // skip a seed if its occurence is larger than this value
 	int max_chain_gap;      // do not chain seed if it is max_chain_gap-bp away from the closest seed
 	int n_threads;          // number of threads
+	int batch_size;		// [QA] batch size
 	int chunk_size;         // process chunk_size-bp sequences in a batch
 	float mask_level;       // regard a hit as redundant if the overlap with another better hit is over mask_level times the min length of the two hits
 	float chain_drop_ratio; // drop a chain if its seed coverage is below chain_drop_ratio times the seed coverage of a better chain overlapping with the small chain
