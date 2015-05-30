@@ -1075,7 +1075,7 @@ static void worker2(void *data, int i, int tid)
 
 void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bns, const uint8_t *pac, int64_t n_processed, int n, bseq1_t *seqs, const mem_pestat_t *pes0)
 {
-	//extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
+	extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
 	extern void kt_for_batch(int n_threads, void (*func)(void*,int,int,int), void *data, int n, int batch_size); // [QA] new kt_for for batch processing
 	worker_t w;
 	mem_alnreg_v *regs;

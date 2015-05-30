@@ -41,7 +41,7 @@ static void *ktf_worker_batch(void *data)
 	pthread_exit(0);
 }
 
-void kt_for_batch(int n_threads, void (*func)(void*,int,int), void *data, int n, int batch_size)
+void kt_for_batch(int n_threads, void (*func)(void*,int,int,int), void *data, int n, int batch_size)
 {
 	int i;
 	kt_for_batch_t t;
