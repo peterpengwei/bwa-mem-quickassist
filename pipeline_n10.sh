@@ -77,6 +77,8 @@ WRAPPER() {
 # Align sequences with BWA
 #WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
 WRAPPER "bwamem" "$BWA mem -t $NTHREAD -b $NBATCH_SIZE -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
+
+WRAPPER "diff" "diff /tmp/cody_genomics_test/HCC1954_dut.sam /tmp/cody_genomics_test/_HCC1954_dut.sam -q >> flow.log"
 ##WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 $IN2 > $SAMFILE"
 ##
 ### Convert SAM to BAM

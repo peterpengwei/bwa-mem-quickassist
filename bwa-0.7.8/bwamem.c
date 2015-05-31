@@ -280,6 +280,43 @@ void mem_print_chain(const bntseq_t *bns, mem_chain_v *chn)
 	}
 }
 
+// comaniac: Batched BWT process.
+void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t *bwt, int64_t l_pac, bseq1_t *seqs, int start, int batch_size)
+{
+// seqs[batch_idx].l_seq, (uint8_t*)(seqs[batch_idx].seq
+
+	kbtree_t(chn) **tree = (kbtree_t(chn) **)malloc(sizeof(kbtree_t(chn) *) * batch_size);
+	smem_i **itr = (smem_i **)malloc(sizeof(smem_i *) * batch_size);
+	int batch_idx;
+
+	for (batch_idx = 0; batch_idx < batch_size; batch_idx++) {
+		kv_init(chn_batch[batch_idx]);
+		if (seqs[start + batch_idx].l_seq < opt->min_seed_len) // if the query is shorter than the seed length, no match
+			continue;
+		tree[batch_idx] = kb_init(chn, KB_DEFAULT_SIZE);
+		itr[batch_idx] = smem_itr_init(bwt);
+		smem_set_query(itr[batch_idx], seqs[start + batch_idx].l_seq, (const uint8_t *) seqs[start + batch_idx].seq);
+
+		// TODO
+		mem_insert_seed(opt, l_pac, tree[batch_idx], itr[batch_idx]);
+	}
+	
+	for (batch_idx = 0; batch_idx < batch_size; batch_idx++) {
+		if (seqs[start + batch_idx].l_seq < opt->min_seed_len)
+			continue;	
+		kv_resize(mem_chain_t, chn_batch[batch_idx], kb_size(tree[batch_idx]));
+
+		#define traverse_func(p_) (chn_batch[batch_idx].a[chn_batch[batch_idx].n++] = *(p_))
+		__kb_traverse(mem_chain_t, tree[batch_idx], traverse_func);
+		#undef traverse_func
+	
+		smem_itr_destroy(itr[batch_idx]);
+		kb_destroy(chn, tree[batch_idx]);
+	}
+	
+	return ;
+}
+
 mem_chain_v mem_chain(const mem_opt_t *opt, const bwt_t *bwt, int64_t l_pac, int len, const uint8_t *seq)
 {
 	mem_chain_v chain;
@@ -1089,11 +1126,16 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 	mem_chain_v* chn_batch = (mem_chain_v*)malloc(sizeof(mem_chain_v)*batch_size);
 	mem_alnreg_v* regs_batch = (mem_alnreg_v*)malloc(sizeof(mem_alnreg_v)*batch_size);
 
+	// comaniac: bwt_batched_tag
 	for (batch_idx=start; batch_idx<start+batch_size; batch_idx++) {
 		for (i = 0; i < seqs[batch_idx].l_seq; ++i) // convert to 2-bit encoding if we have not done so
 			seqs[batch_idx].seq[i] = seqs[batch_idx].seq[i] < 4? seqs[batch_idx].seq[i] : nst_nt4_table[(int)(seqs[batch_idx].seq[i])];
+	}
 
-		chn_batch[batch_idx-start] = mem_chain(opt, bwt, bns->l_pac, seqs[batch_idx].l_seq, (uint8_t*)(seqs[batch_idx].seq));
+	// comaniac: bwt_batched_tag
+	mem_chain_batched(chn_batch, opt, bwt, bns->l_pac, seqs, start, batch_size);
+
+	for (batch_idx=start; batch_idx<start+batch_size; batch_idx++) {
 		chn_batch[batch_idx-start].n = mem_chain_flt(opt, chn_batch[batch_idx-start].n, chn_batch[batch_idx-start].a);
 		if (bwa_verbose >= 4) mem_print_chain(bns, &chn_batch[batch_idx-start]);
 
