@@ -115,6 +115,136 @@ void smem_set_query(smem_i *itr, int len, const uint8_t *query)
 	itr->len = len;
 }
 
+// comaniac: Batched BWT process.
+void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len, int split_width, int start_width, 
+		int start, int batch_size, const int *done)
+{
+	int batch_idx;
+	int i;
+
+	int *max = (int *)calloc(batch_size, sizeof(int));
+	int *max_i = (int *)calloc(batch_size, sizeof(int));
+	int *ori_start = (int *)calloc(batch_size, sizeof(int));
+	int *local_done = (int *)calloc(batch_size, sizeof(int));
+
+	// comaniac: Use local_done in the rest of this function
+	memcpy(local_done, done, sizeof(int) * batch_size);
+
+	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+		if (done[batch_idx])
+			continue;
+
+		itr[batch_idx]->tmpvec[0]->n = 0;
+		itr[batch_idx]->tmpvec[1]->n = 0;
+		itr[batch_idx]->matches->n = 0;
+		itr[batch_idx]->sub->n = 0;
+
+		if (itr[batch_idx]->start >= itr[batch_idx]->len || itr[batch_idx]->start < 0) {
+			match_a[batch_idx] = 0;
+			local_done[batch_idx] = 1;
+			continue;
+		}
+
+		while (itr[batch_idx]->start < itr[batch_idx]->len && itr[batch_idx]->query[itr[batch_idx]->start] > 3) 
+			++itr[batch_idx]->start; // skip ambiguous bases
+	
+		if (itr[batch_idx]->start == itr[batch_idx]->len) {
+			match_a[batch_idx] = 0;
+			local_done[batch_idx] = 1;
+			continue;
+		}
+
+		ori_start[batch_idx] = itr[batch_idx]->start;
+	}
+
+	// TODO: Batch
+	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+		if (!local_done[batch_idx])
+			itr[batch_idx]->start = bwt_smem1(itr[batch_idx]->bwt, itr[batch_idx]->len, itr[batch_idx]->query, ori_start[batch_idx], start_width, itr[batch_idx]->matches, itr[batch_idx]->tmpvec); // search for SMEM
+	}
+
+	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+		if (local_done[batch_idx])
+			continue;
+
+		// well, in theory, we should never come here
+		if (itr[batch_idx]->matches->n == 0) {
+			match_a[batch_idx] = itr[batch_idx]->matches;
+			local_done[batch_idx] = 1;
+			continue;
+		}
+
+		// look for the longest match
+		for (i = 0; i < itr[batch_idx]->matches->n; ++i) {
+			bwtintv_t *p = &itr[batch_idx]->matches->a[i];
+			int len = (uint32_t)p->info - (p->info>>32);
+			if (max[batch_idx] < len) {
+				max[batch_idx] = len;
+				max_i[batch_idx] = i;
+			}
+		}
+
+		// if the longest SMEM is not unique or short, skip the rest of procedure.
+		if (split_len[batch_idx] <= 0 || max[batch_idx] < split_len[batch_idx] || 
+				itr[batch_idx]->matches->a[max_i[batch_idx]].x[2] > split_width) {
+			match_a[batch_idx] = itr[batch_idx]->matches;
+			local_done[batch_idx] = 1;
+		}
+	}
+
+	// TODO: Batch, send local_done instead of done.
+	// starting from the middle of the longest MEM
+	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+		if (local_done[batch_idx])
+			continue;
+
+		bwtintv_t *p = &itr[batch_idx]->matches->a[max_i[batch_idx]];
+		bwt_smem1(itr[batch_idx]->bwt, itr[batch_idx]->len, itr[batch_idx]->query, ((uint32_t)p->info + (p->info>>32))>>1, 
+							itr[batch_idx]->matches->a[max_i[batch_idx]].x[2]+1, itr[batch_idx]->sub, itr[batch_idx]->tmpvec); 
+	}
+
+	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) { 
+		if (local_done[batch_idx])
+			continue;
+
+		int j;
+		bwtintv_v *a = itr[batch_idx]->tmpvec[0]; // reuse tmpvec[0] for merging
+
+		i = j = 0; a->n = 0;
+		while (i < itr[batch_idx]->matches->n && j < itr[batch_idx]->sub->n) { // ordered merge
+			int64_t xi = itr[batch_idx]->matches->a[i].info>>32<<32 | (itr[batch_idx]->len - (uint32_t)itr[batch_idx]->matches->a[i].info);
+			int64_t xj = itr[batch_idx]->sub->a[j].info>>32<<32 | (itr[batch_idx]->len - (uint32_t)itr[batch_idx]->sub->a[j].info);
+			if (xi < xj) {
+				kv_push(bwtintv_t, *a, itr[batch_idx]->matches->a[i]);
+				++i;
+			} else if ((uint32_t)itr[batch_idx]->sub->a[j].info - (itr[batch_idx]->sub->a[j].info>>32) >= max[batch_idx]>>1 && 
+								(uint32_t)itr[batch_idx]->sub->a[j].info > ori_start[batch_idx]) {
+				kv_push(bwtintv_t, *a, itr[batch_idx]->sub->a[j]);
+				++j;
+			} else 
+				++j;
+		}
+
+		for (; i < itr[batch_idx]->matches->n; ++i) 
+			kv_push(bwtintv_t, *a, itr[batch_idx]->matches->a[i]);
+
+		for (; j < itr[batch_idx]->sub->n; ++j)
+			if ((uint32_t)itr[batch_idx]->sub->a[j].info - (itr[batch_idx]->sub->a[j].info>>32) >= max[batch_idx]>>1 && 
+					(uint32_t)itr[batch_idx]->sub->a[j].info > ori_start[batch_idx])
+				kv_push(bwtintv_t, *a, itr[batch_idx]->sub->a[j]);
+		kv_copy(bwtintv_t, *itr[batch_idx]->matches, *a);
+
+		match_a[batch_idx] = itr[batch_idx]->matches;
+	} // end for batch_idx
+
+	free(ori_start);
+	free(max);
+	free(max_i);
+	free(local_done);
+	return ;
+}
+
+
 const bwtintv_v *smem_next2(smem_i *itr, int split_len, int split_width, int start_width)
 {
 	int i, max, max_i, ori_start;
@@ -229,67 +359,88 @@ static int test_and_merge(const mem_opt_t *opt, int64_t l_pac, mem_chain_t *c, c
 
 // comaniac: Batched BWT process.
 static void mem_insert_seed_batched(const mem_opt_t *opt, int64_t l_pac, kbtree_t(chn) **tree, 
-		smem_i **itr, int start, int batch_size, int *skip)
+		smem_i **itr, int start, int batch_size, const int *done)
 {
 	int start_width = (opt->flag & MEM_F_NO_EXACT)? 2 : 1;
 	int batch_idx;
 
+	int all_done = 0;
+	int *local_done = (int *)malloc(sizeof(int) * batch_size);
+	memcpy(local_done, done, sizeof(int) * batch_size);
+
 	const bwtintv_v **a = (const bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
 	int *split_len = (int *)malloc(sizeof(int) * batch_size);
+
 	int split_len_init = (int)(opt->min_seed_len * opt->split_factor + .499);
-
-	for(batch_idx = 0; batch_idx < batch_size; ++batch_idx)
-		split_len[batch_idx] = (split_len_init < itr[batch_idx]->len)? split_len_init : itr[batch_size]->len;
-
 	for(batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
-		if (skip[batch_idx])
+		if (local_done[batch_idx])
 			continue;
-	while ((a[batch_idx] = smem_next2(itr[batch_idx], split_len[batch_idx], opt->split_width, start_width)) != 0) { 
-	// to find all SMEM and some internal MEM
-		int i;
-		for (i = 0; i < a[batch_idx]->n; ++i) { // go through each SMEM/MEM up to itr->start
-			bwtintv_t *p = &a[batch_idx]->a[i];
-			int slen = (uint32_t)p->info - (p->info>>32); // seed length
-			int64_t k;
-			if (slen < opt->min_seed_len || p->x[2] > opt->max_occ) 
-				continue; // ignore if too short or too repetitive
+		split_len[batch_idx] = (split_len_init < itr[batch_idx]->len)? split_len_init : itr[batch_size]->len;
+	}
 
-			for (k = 0; k < p->x[2]; ++k) {
-				mem_chain_t tmp, *lower, *upper;
-				mem_seed_t s;
-				int to_add = 0;
+	while (!all_done) {
+		all_done = 1;
 
-				s.rbeg = tmp.pos = bwt_sa(itr[batch_idx]->bwt, p->x[0] + k); 
-				// this is the base coordinate in the forward-reverse reference
+		smem_next2_batched(a, itr, split_len, opt->split_width, start_width, start, batch_size, local_done);
 
-				s.qbeg = p->info>>32;
-				s.len  = slen;
-				if (bwa_verbose >= 5) printf("* Found SEED: length=%d,query_beg=%d,ref_beg=%ld\n", s.len, s.qbeg, (long)s.rbeg);
-				if (s.rbeg < l_pac && l_pac < s.rbeg + s.len) 
-					continue; // bridging forward-reverse boundary; skip
+		for(batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+			if (local_done[batch_idx])
+				continue;
 
-				if (kb_size(tree[batch_idx])) {
-					kb_intervalp(chn, tree[batch_idx], &tmp, &lower, &upper); // find the closest chain
-					if (!lower || !test_and_merge(opt, l_pac, lower, &s)) 
-						to_add = 1;
-				} 
-				else 
-					to_add = 1;
-
-				if (to_add) { // add the seed as a new chain
-					tmp.n = 1; tmp.m = 4;
-					tmp.seeds = calloc(tmp.m, sizeof(mem_seed_t));
-					tmp.seeds[0] = s;
-					kb_putp(chn, tree[batch_idx], &tmp);
-				}
+			if (a[batch_idx] == 0) {
+				local_done[batch_idx] = 1;
+				continue;
 			}
-		}
-	}
 
-	}
+			all_done = 0;
+	
+			// to find all SMEM and some internal MEM
+			int i;
+			for (i = 0; i < a[batch_idx]->n; ++i) { // go through each SMEM/MEM up to itr->start
+				bwtintv_t *p = &a[batch_idx]->a[i];
+				int slen = (uint32_t)p->info - (p->info>>32); // seed length
+				int64_t k;
+				if (slen < opt->min_seed_len || p->x[2] > opt->max_occ) 
+					continue; // ignore if too short or too repetitive
+
+				for (k = 0; k < p->x[2]; ++k) {
+					mem_chain_t tmp, *lower, *upper;
+					mem_seed_t s;
+					int to_add = 0;
+
+					s.rbeg = tmp.pos = bwt_sa(itr[batch_idx]->bwt, p->x[0] + k); 
+					// this is the base coordinate in the forward-reverse reference
+
+					s.qbeg = p->info>>32;
+					s.len  = slen;
+					if (bwa_verbose >= 5) 
+						printf("* Found SEED: length=%d,query_beg=%d,ref_beg=%ld\n", s.len, s.qbeg, (long)s.rbeg);
+
+					if (s.rbeg < l_pac && l_pac < s.rbeg + s.len) 
+						continue; // bridging forward-reverse boundary; skip
+
+					if (kb_size(tree[batch_idx])) {
+						kb_intervalp(chn, tree[batch_idx], &tmp, &lower, &upper); // find the closest chain
+						if (!lower || !test_and_merge(opt, l_pac, lower, &s)) 
+							to_add = 1;
+					} 
+					else 
+						to_add = 1;
+
+					if (to_add) { // add the seed as a new chain
+						tmp.n = 1; tmp.m = 4;
+						tmp.seeds = calloc(tmp.m, sizeof(mem_seed_t));
+						tmp.seeds[0] = s;
+						kb_putp(chn, tree[batch_idx], &tmp);
+					}
+				} // end for k
+			} // end for i
+		} // end for batch_idx
+	} // end while
 
 	free(a);
 	free(split_len);
+	free(local_done);
 
 	return ;
 }
@@ -301,7 +452,6 @@ static void mem_insert_seed(const mem_opt_t *opt, int64_t l_pac, kbtree_t(chn) *
 	int start_width = (opt->flag & MEM_F_NO_EXACT)? 2 : 1;
 	split_len = split_len < itr->len? split_len : itr->len;
 
-	// TODO: Batch
 	while ((a = smem_next2(itr, split_len, opt->split_width, start_width)) != 0) { // to find all SMEM and some internal MEM
 		int i;
 		for (i = 0; i < a->n; ++i) { // go through each SMEM/MEM up to itr->start
@@ -386,18 +536,16 @@ void mem_print_chain(const bntseq_t *bns, mem_chain_v *chn)
 // comaniac: Batched BWT process.
 void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t *bwt, int64_t l_pac, bseq1_t *seqs, int start, int batch_size)
 {
-// seqs[batch_idx].l_seq, (uint8_t*)(seqs[batch_idx].seq
-
 	kbtree_t(chn) **tree = (kbtree_t(chn) **)malloc(sizeof(kbtree_t(chn) *) * batch_size);
 	smem_i **itr = (smem_i **)malloc(sizeof(smem_i *) * batch_size);
-	int *skip = (int *)calloc(batch_size, sizeof(int));
+	int *done = (int *)calloc(batch_size, sizeof(int));
 
 	int batch_idx;
 
 	for (batch_idx = 0; batch_idx < batch_size; batch_idx++) {
 		kv_init(chn_batch[batch_idx]);
 		if (seqs[start + batch_idx].l_seq < opt->min_seed_len) { // if the query is shorter than the seed length, no match
-			skip[batch_idx] = 1;
+			done[batch_idx] = 1;
 			continue;
 		}
 		tree[batch_idx] = kb_init(chn, KB_DEFAULT_SIZE);
@@ -405,10 +553,10 @@ void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t
 		smem_set_query(itr[batch_idx], seqs[start + batch_idx].l_seq, (const uint8_t *) seqs[start + batch_idx].seq);
 	}
 
-	mem_insert_seed_batched(opt, l_pac, tree, itr, start, batch_size, skip);
+	mem_insert_seed_batched(opt, l_pac, tree, itr, start, batch_size, done);
 	
 	for (batch_idx = 0; batch_idx < batch_size; batch_idx++) {
-		if (skip[batch_idx])
+		if (done[batch_idx])
 			continue;	
 		kv_resize(mem_chain_t, chn_batch[batch_idx], kb_size(tree[batch_idx]));
 
@@ -420,7 +568,7 @@ void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t
 		kb_destroy(chn, tree[batch_idx]);
 	}
 	
-	free(skip);
+	free(done);
 	return ;
 }
 
