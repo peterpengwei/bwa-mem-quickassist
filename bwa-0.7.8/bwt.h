@@ -121,6 +121,9 @@ extern "C" {
 
 	// SMEM iterator interface
 
+	// comaniac: Batched BWT process.
+	//void bwt_smem1_batched(smem_i **itr, int *ori_start, int start_width, int start, int batch_size, const int *done);
+
 #ifdef __cplusplus
 }
 #endif

@@ -24,8 +24,8 @@ NCTHREAD=4
 NBATCH_SIZE=10
 
 HDR=`printf "'@RG\tID:%s\tLB:%s\tSM:%s'" $INFILE $INFILE $INFILE`
-READ_SIZE=1
-IN1=$IDIR/${INFILE}_1_${READ_SIZE}Mreads.fq
+READ_SIZE=1M
+IN1=$IDIR/${INFILE}_1_${READ_SIZE}reads.fq
 IN2=$IDIR/${INFILE}_2.fq
 OFILE=$ODIR/$INFILE
 SAMFILE=${OFILE}_dut.sam
@@ -76,10 +76,10 @@ WRAPPER() {
 
 # Align sequences with BWA
 #WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
-WRAPPER "rm" "rm $SAMFILE"
+rm $SAMFILE
 WRAPPER "bwamem" "$BWA mem -t $NTHREAD -b $NBATCH_SIZE -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
 
-WRAPPER "diff" "diff /tmp/cody_genomics_test/HCC1954_dut.sam /tmp/cody_genomics_test/_HCC1954_dut.sam -q >> flow.log"
+WRAPPER "diff" "diff /tmp/cody_genomics_test/HCC1954_dut.sam /tmp/cody_genomics_test/_${READ_SIZE}HCC1954_dut.sam -q >> flow.log"
 ##WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 $IN2 > $SAMFILE"
 ##
 ### Convert SAM to BAM

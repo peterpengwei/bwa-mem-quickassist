@@ -8,8 +8,15 @@
 #define MEM_MAPQ_COEF 30.0
 #define MEM_MAPQ_MAX  60
 
-struct __smem_i;
-typedef struct __smem_i smem_i;
+//typedef struct __smem_i smem_i;
+typedef struct __smem_i {
+	const bwt_t *bwt;
+	const uint8_t *query;
+	int start, len;
+	bwtintv_v *matches; // matches; to be returned by smem_next()
+	bwtintv_v *sub;     // sub-matches inside the longest match; temporary
+	bwtintv_v *tmpvec[2]; // temporary arrays
+} smem_i;
 
 #define MEM_F_PE        0x2
 #define MEM_F_NOPAIRING 0x4

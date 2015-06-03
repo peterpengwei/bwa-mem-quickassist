@@ -78,15 +78,6 @@ mem_opt_t *mem_opt_init()
  * SMEM iterator interface *
  ***************************/
 
-struct __smem_i {
-	const bwt_t *bwt;
-	const uint8_t *query;
-	int start, len;
-	bwtintv_v *matches; // matches; to be returned by smem_next()
-	bwtintv_v *sub;     // sub-matches inside the longest match; temporary
-	bwtintv_v *tmpvec[2]; // temporary arrays
-};
-
 smem_i *smem_itr_init(const bwt_t *bwt)
 {
 	smem_i *itr;
@@ -157,11 +148,15 @@ void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len,
 		ori_start[batch_idx] = itr[batch_idx]->start;
 	}
 
-	// TODO: Batch
+	// search for SMEM
+	bwt_smem1_batched(itr, ori_start, start_width, start, batch_size, local_done);
+
+/*
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (!local_done[batch_idx])
 			itr[batch_idx]->start = bwt_smem1(itr[batch_idx]->bwt, itr[batch_idx]->len, itr[batch_idx]->query, ori_start[batch_idx], start_width, itr[batch_idx]->matches, itr[batch_idx]->tmpvec); // search for SMEM
 	}
+*/
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (local_done[batch_idx])
