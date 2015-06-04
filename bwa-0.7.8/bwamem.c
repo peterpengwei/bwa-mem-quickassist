@@ -108,7 +108,7 @@ void smem_set_query(smem_i *itr, int len, const uint8_t *query)
 
 // comaniac: Batched BWT process.
 void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len, int split_width, int start_width, 
-		int start, int batch_size, const int *done)
+		int batch_size, const int *done)
 {
 	int batch_idx;
 	int i;
@@ -149,14 +149,7 @@ void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len,
 	}
 
 	// search for SMEM
-	bwt_smem1_batched(itr, ori_start, start_width, start, batch_size, local_done);
-
-/*
-	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
-		if (!local_done[batch_idx])
-			itr[batch_idx]->start = bwt_smem1(itr[batch_idx]->bwt, itr[batch_idx]->len, itr[batch_idx]->query, ori_start[batch_idx], start_width, itr[batch_idx]->matches, itr[batch_idx]->tmpvec); // search for SMEM
-	}
-*/
+	bwt_smem1_batched(itr, ori_start, NULL, start_width, 0, batch_size, local_done);
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (local_done[batch_idx])
@@ -187,16 +180,8 @@ void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len,
 		}
 	}
 
-	// TODO: Batch, send local_done instead of done.
 	// starting from the middle of the longest MEM
-	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
-		if (local_done[batch_idx])
-			continue;
-
-		bwtintv_t *p = &itr[batch_idx]->matches->a[max_i[batch_idx]];
-		bwt_smem1(itr[batch_idx]->bwt, itr[batch_idx]->len, itr[batch_idx]->query, ((uint32_t)p->info + (p->info>>32))>>1, 
-							itr[batch_idx]->matches->a[max_i[batch_idx]].x[2]+1, itr[batch_idx]->sub, itr[batch_idx]->tmpvec); 
-	}
+	bwt_smem1_batched(itr, ori_start, max_i, start_width, 1, batch_size, local_done);
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) { 
 		if (local_done[batch_idx])
@@ -354,7 +339,7 @@ static int test_and_merge(const mem_opt_t *opt, int64_t l_pac, mem_chain_t *c, c
 
 // comaniac: Batched BWT process.
 static void mem_insert_seed_batched(const mem_opt_t *opt, int64_t l_pac, kbtree_t(chn) **tree, 
-		smem_i **itr, int start, int batch_size, const int *done)
+		smem_i **itr, int batch_size, const int *done)
 {
 	int start_width = (opt->flag & MEM_F_NO_EXACT)? 2 : 1;
 	int batch_idx;
@@ -376,7 +361,7 @@ static void mem_insert_seed_batched(const mem_opt_t *opt, int64_t l_pac, kbtree_
 	while (!all_done) {
 		all_done = 1;
 
-		smem_next2_batched(a, itr, split_len, opt->split_width, start_width, start, batch_size, local_done);
+		smem_next2_batched(a, itr, split_len, opt->split_width, start_width, batch_size, local_done);
 
 		for(batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 			if (local_done[batch_idx])
@@ -548,7 +533,7 @@ void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t
 		smem_set_query(itr[batch_idx], seqs[start + batch_idx].l_seq, (const uint8_t *) seqs[start + batch_idx].seq);
 	}
 
-	mem_insert_seed_batched(opt, l_pac, tree, itr, start, batch_size, done);
+	mem_insert_seed_batched(opt, l_pac, tree, itr, batch_size, done);
 	
 	for (batch_idx = 0; batch_idx < batch_size; batch_idx++) {
 		if (done[batch_idx])
