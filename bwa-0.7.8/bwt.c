@@ -271,10 +271,10 @@ void kv_push_bwtintv_t(bwtintv_v *v, bwtintv_t ik)
 }
 
 // comanaic: Batched BWT process.
-void bwt_extend_all_batched(smem_i **itr, int *x, bwtintv_v **curr, bwtintv_t *ik, bwtintv_t **ok, 
+void bwt_forward_search_batched(smem_i **itr, int *x, bwtintv_v **curr, bwtintv_t *ik, bwtintv_t **ok, 
 	int is_back, int *min_intv, int batch_size, const int *done)
 {
-	int batch_idx, i, j;
+	int batch_idx, i;
 
   for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
     if (done[batch_idx])
@@ -284,14 +284,15 @@ void bwt_extend_all_batched(smem_i **itr, int *x, bwtintv_v **curr, bwtintv_t *i
       if (itr[batch_idx]->query[i] < 4) { // an A/C/G/T base
         int c = 3 - itr[batch_idx]->query[i]; // complement of q[i]
 				bwtint_t tk[4], tl[4];
-		
+	
 				// bwt_extend =====		
+				int j;
 				bwt_2occ4(itr[batch_idx]->bwt, ik[batch_idx].x[!is_back] - 1, 
 									ik[batch_idx].x[!is_back] - 1 + ik[batch_idx].x[2], tk, tl);
 				
 				for (j = 0; j != 4; ++j) {
-					ok[batch_idx][i].x[!is_back] = itr[batch_idx]->bwt->L2[i] + 1 + tk[i];
-					ok[batch_idx][i].x[2] = tl[i] - tk[i];
+					ok[batch_idx][j].x[!is_back] = itr[batch_idx]->bwt->L2[j] + 1 + tk[j];
+					ok[batch_idx][j].x[2] = tl[j] - tk[j];
 				}
 				ok[batch_idx][3].x[is_back] = ik[batch_idx].x[is_back] + 
 					(ik[batch_idx].x[!is_back] <= itr[batch_idx]->bwt->primary && 
@@ -416,34 +417,7 @@ void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width
 		ik[batch_idx].info = x[batch_idx] + 1;
 	}
 
-	// TODO: Batch
-//	bwt_extend_all_batched(itr, x, curr, ik, ok, 0, min_intv, batch_size, local_done);
-
-	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
-		if (local_done[batch_idx])
-			continue;
-
-		for (i = x[batch_idx] + 1, curr[batch_idx]->n = 0; i < itr[batch_idx]->len; ++i) { // forward search
-			if (itr[batch_idx]->query[i] < 4) { // an A/C/G/T base
-				int c = 3 - itr[batch_idx]->query[i]; // complement of q[i]
-				bwt_extend(itr[batch_idx]->bwt, &ik[batch_idx], ok[batch_idx], 0);
-
-				if (ok[batch_idx][c].x[2] != ik[batch_idx].x[2]) { // change of the interval size
-					kv_push(bwtintv_t, *curr[batch_idx], ik[batch_idx]);
-					if (ok[batch_idx][c].x[2] < min_intv[batch_idx]) 
-						break; // the interval size is too small to be extended further
-				}
-				ik[batch_idx] = ok[batch_idx][c]; 
-				ik[batch_idx].info = i + 1;
-			} else { // an ambiguous base
-				kv_push(bwtintv_t, *curr[batch_idx], ik[batch_idx]);
-				break; // always terminate extension at an ambiguous base; in this case, i<len always stands
-			}
-		}
-		if (i == itr[batch_idx]->len) 
-			kv_push(bwtintv_t, *curr[batch_idx], ik[batch_idx]); // push the last interval if we reach the end
-	}
-	// ====================
+	bwt_forward_search_batched(itr, x, curr, ik, ok, 0, min_intv, batch_size, local_done);
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (local_done[batch_idx])
