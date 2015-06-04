@@ -272,7 +272,7 @@ void kv_push_bwtintv_t(bwtintv_v *v, bwtintv_t ik)
 
 // comanaic: Batched BWT process.
 void bwt_forward_search_batched(smem_i **itr, int *x, bwtintv_v **curr, bwtintv_t *ik, bwtintv_t **ok, 
-	int is_back, int *min_intv, int batch_size, const int *done)
+		int *min_intv, int batch_size, const int *done)
 {
 	int batch_idx, i;
 
@@ -287,19 +287,19 @@ void bwt_forward_search_batched(smem_i **itr, int *x, bwtintv_v **curr, bwtintv_
 	
 				// bwt_extend =====		
 				int j;
-				bwt_2occ4(itr[batch_idx]->bwt, ik[batch_idx].x[!is_back] - 1, 
-									ik[batch_idx].x[!is_back] - 1 + ik[batch_idx].x[2], tk, tl);
+				bwt_2occ4(itr[batch_idx]->bwt, ik[batch_idx].x[1] - 1, 
+									ik[batch_idx].x[1] - 1 + ik[batch_idx].x[2], tk, tl);
 				
 				for (j = 0; j != 4; ++j) {
-					ok[batch_idx][j].x[!is_back] = itr[batch_idx]->bwt->L2[j] + 1 + tk[j];
+					ok[batch_idx][j].x[1] = itr[batch_idx]->bwt->L2[j] + 1 + tk[j];
 					ok[batch_idx][j].x[2] = tl[j] - tk[j];
 				}
-				ok[batch_idx][3].x[is_back] = ik[batch_idx].x[is_back] + 
-					(ik[batch_idx].x[!is_back] <= itr[batch_idx]->bwt->primary && 
-					 ik[batch_idx].x[!is_back] + ik[batch_idx].x[2] - 1 >= itr[batch_idx]->bwt->primary);
-				ok[batch_idx][2].x[is_back] = ok[batch_idx][3].x[is_back] + ok[batch_idx][3].x[2];
-				ok[batch_idx][1].x[is_back] = ok[batch_idx][2].x[is_back] + ok[batch_idx][2].x[2];
-				ok[batch_idx][0].x[is_back] = ok[batch_idx][1].x[is_back] + ok[batch_idx][1].x[2];
+				ok[batch_idx][3].x[0] = ik[batch_idx].x[0] + 
+					(ik[batch_idx].x[1] <= itr[batch_idx]->bwt->primary && 
+					 ik[batch_idx].x[1] + ik[batch_idx].x[2] - 1 >= itr[batch_idx]->bwt->primary);
+				ok[batch_idx][2].x[0] = ok[batch_idx][3].x[0] + ok[batch_idx][3].x[2];
+				ok[batch_idx][1].x[0] = ok[batch_idx][2].x[0] + ok[batch_idx][2].x[2];
+				ok[batch_idx][0].x[0] = ok[batch_idx][1].x[0] + ok[batch_idx][1].x[2];
 				// bwt_extend =====
 
         if (ok[batch_idx][c].x[2] != ik[batch_idx].x[2]) { // change of the interval size
@@ -317,6 +317,73 @@ void bwt_forward_search_batched(smem_i **itr, int *x, bwtintv_v **curr, bwtintv_
     if (i == itr[batch_idx]->len)
       kv_push_bwtintv_t(curr[batch_idx], ik[batch_idx]); // push the last interval if we reach the end
   }	
+
+	return ;
+}
+
+// comaniac: Batched BWT process.
+void bwt_backward_search_batched(smem_i **itr, int *x, bwtintv_v ***intv, bwtintv_t *ik, bwtintv_t **ok, 
+		bwtintv_v **mem, int *min_intv, int batch_size, const int *done)
+{
+	#define PREV	0
+	#define CURR	1
+	#define INV(t) (t == PREV)? CURR: PREV
+
+	int batch_idx, i, j;
+	int token;
+
+	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+		if (done[batch_idx])
+			continue;
+
+		token = PREV;
+		for (i = x[batch_idx] - 1; i >= -1; --i) { // backward search for MEMs
+			int c = i < 0	? -1 : 
+						itr[batch_idx]->query[i] < 4? itr[batch_idx]->query[i] : 
+						-1; // c==-1 if i<0 or q[i] is an ambiguous base
+
+			for (j = 0, intv[token][batch_idx]->n = 0; j < intv[INV(token)][batch_idx]->n; ++j) {
+				bwtintv_t *p = &intv[INV(token)][batch_idx]->a[j];
+
+				// bwt_extend =====
+				bwtint_t tk[4], tl[4];
+				int k;
+				bwt_2occ4(itr[batch_idx]->bwt, p->x[0] - 1, p->x[0] - 1 + p->x[2], tk, tl);
+				for (k = 0; k != 4; ++k) {
+					ok[batch_idx][k].x[0] = itr[batch_idx]->bwt->L2[k] + 1 + tk[k];
+					ok[batch_idx][k].x[2] = tl[k] - tk[k];
+				}
+				ok[batch_idx][3].x[1] = p->x[1] + 
+					(p->x[0] <= itr[batch_idx]->bwt->primary && 
+					 p->x[0] + p->x[2] - 1 >= itr[batch_idx]->bwt->primary);
+				ok[batch_idx][2].x[1] = ok[batch_idx][3].x[0] + ok[batch_idx][3].x[2];
+				ok[batch_idx][1].x[1] = ok[batch_idx][2].x[0] + ok[batch_idx][2].x[2];
+				ok[batch_idx][0].x[1] = ok[batch_idx][1].x[0] + ok[batch_idx][1].x[2];
+				// bwt_extend =====
+
+				if (c < 0 || ok[batch_idx][c].x[2] < min_intv[batch_idx]) { 
+				// keep the hit if reaching the beginning or an ambiguous base or the intv is small enough
+					if (intv[token][batch_idx]->n == 0) { // test curr->n>0 to make sure there are no longer matches
+						if (mem[batch_idx]->n == 0 || 
+								i + 1 < mem[batch_idx]->a[mem[batch_idx]->n-1].info>>32) { // skip contained matches
+							ik[batch_idx] = *p; 
+							ik[batch_idx].info |= (uint64_t)(i + 1)<<32;
+							kv_push_bwtintv_t(mem[batch_idx], ik[batch_idx]);
+						}
+					} // otherwise the match is contained in another longer match
+				} else if (intv[token][batch_idx]->n == 0 || 
+									ok[batch_idx][c].x[2] != intv[token][batch_idx]->a[intv[token][batch_idx]->n-1].x[2]) {
+					ok[batch_idx][c].info = p->info;
+					kv_push_bwtintv_t(intv[token][batch_idx], ok[batch_idx][c]);
+				}
+			}
+			if (intv[token][batch_idx]->n == 0) 
+				break;
+			token = INV(token);
+
+		} // end for i
+	} // end for batch_idx
+	// =============
 
 	return ;
 }
@@ -351,6 +418,9 @@ static void bwt_reverse_intvs(bwtintv_v *p)
 // comaniac: Batched BWT process.
 void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width, int is_middle, int batch_size, const int *done)
 {
+	#define PREV	0
+	#define CURR	1
+
 	int batch_idx;
 	int *min_intv = (int *)malloc(sizeof(int) * batch_size);
 	int *x = (int *)malloc(sizeof(int) * batch_size);
@@ -358,7 +428,7 @@ void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width
 	int *local_done = (int *)malloc(sizeof(int) * batch_size);
 	memcpy(local_done, done, sizeof(int) * batch_size);
 
-	int i, j;
+	int i;
 
 	if (!is_middle) {
 		memcpy(x, ori_start, sizeof(int) * batch_size);
@@ -379,9 +449,10 @@ void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width
 	for (i = 0; i < batch_size; ++i)
 		ok[i] = (bwtintv_t *)malloc(sizeof(bwtintv_t) * 4);
 
-	bwtintv_v **prev = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
-	bwtintv_v **curr = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
-	bwtintv_v **swap = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
+	bwtintv_v ***intv = (bwtintv_v ***)malloc(sizeof(bwtintv_v **) * 2);
+	for (i = 0; i < 2; ++i)	
+		intv[i] = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
+
 	bwtintv_v **a = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);;
 	for (i = 0; i < batch_size; ++i)
 		a[i] = (bwtintv_v *)malloc(sizeof(bwtintv_v) * 2);
@@ -411,67 +482,26 @@ void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width
 		kv_init(a[batch_idx][1]);
 
 		// use the temporary vector if provided
-		prev[batch_idx] = itr[batch_idx]->tmpvec && itr[batch_idx]->tmpvec[0]? itr[batch_idx]->tmpvec[0] : &a[batch_idx][0]; 
-		curr[batch_idx] = itr[batch_idx]->tmpvec && itr[batch_idx]->tmpvec[1]? itr[batch_idx]->tmpvec[1] : &a[batch_idx][1];
+		intv[PREV][batch_idx] = itr[batch_idx]->tmpvec && itr[batch_idx]->tmpvec[0]? itr[batch_idx]->tmpvec[0] : &a[batch_idx][0]; 
+		intv[CURR][batch_idx] = itr[batch_idx]->tmpvec && itr[batch_idx]->tmpvec[1]? itr[batch_idx]->tmpvec[1] : &a[batch_idx][1];
 		bwt_set_intv(itr[batch_idx]->bwt, itr[batch_idx]->query[x[batch_idx]], ik[batch_idx]); // the initial interval of a single base
 		ik[batch_idx].info = x[batch_idx] + 1;
 	}
 
-	bwt_forward_search_batched(itr, x, curr, ik, ok, 0, min_intv, batch_size, local_done);
+	bwt_forward_search_batched(itr, x, intv[CURR], ik, ok, min_intv, batch_size, local_done);
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (local_done[batch_idx])
 			continue;
 
 		// s.t. smaller intervals (i.e. longer matches) visited first
-		bwt_reverse_intvs(curr[batch_idx]);
+		bwt_reverse_intvs(intv[CURR][batch_idx]);
 
 		if (!is_middle)
-			itr[batch_idx]->start = curr[batch_idx]->a[0].info;
-		swap[batch_idx] = curr[batch_idx]; 
-		curr[batch_idx] = prev[batch_idx]; 
-		prev[batch_idx] = swap[batch_idx];
+			itr[batch_idx]->start = intv[CURR][batch_idx]->a[0].info;
 	}
 
-	// TODO: Batch
-	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
-		if (local_done[batch_idx])
-			continue;
-
-		for (i = x[batch_idx] - 1; i >= -1; --i) { // backward search for MEMs
-			int c = i < 0	? -1 : 
-						itr[batch_idx]->query[i] < 4? itr[batch_idx]->query[i] : 
-						-1; // c==-1 if i<0 or q[i] is an ambiguous base
-
-			for (j = 0, curr[batch_idx]->n = 0; j < prev[batch_idx]->n; ++j) {
-				bwtintv_t *p = &prev[batch_idx]->a[j];
-
-				bwt_extend(itr[batch_idx]->bwt, p, ok[batch_idx], 1);
-
-				if (c < 0 || ok[batch_idx][c].x[2] < min_intv[batch_idx]) { 
-				// keep the hit if reaching the beginning or an ambiguous base or the intv is small enough
-					if (curr[batch_idx]->n == 0) { // test curr->n>0 to make sure there are no longer matches
-						if (mem[batch_idx]->n == 0 || 
-								i + 1 < mem[batch_idx]->a[mem[batch_idx]->n-1].info>>32) { // skip contained matches
-							ik[batch_idx] = *p; 
-							ik[batch_idx].info |= (uint64_t)(i + 1)<<32;
-							kv_push(bwtintv_t, *mem[batch_idx], ik[batch_idx]);
-						}
-					} // otherwise the match is contained in another longer match
-				} else if (curr[batch_idx]->n == 0 || ok[batch_idx][c].x[2] != curr[batch_idx]->a[curr[batch_idx]->n-1].x[2]) {
-					ok[batch_idx][c].info = p->info;
-					kv_push(bwtintv_t, *curr[batch_idx], ok[batch_idx][c]);
-				}
-			}
-			if (curr[batch_idx]->n == 0) 
-				break;
-			swap[batch_idx] = curr[batch_idx]; 
-			curr[batch_idx] = prev[batch_idx]; 
-			prev[batch_idx] = swap[batch_idx];
-
-		} // end for i
-	} // end for batch_idx
-	// =============
+	bwt_backward_search_batched(itr, x, intv, ik, ok, mem, min_intv, batch_size, local_done);
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (local_done[batch_idx])
@@ -487,9 +517,9 @@ void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width
 
 	free(local_done);
 	free(ik);
-	free(prev);
-	free(curr);
-	free(swap);
+	for (i = 0; i < 2; ++i)
+		free(intv[i]);
+	free(intv);
 	for (i = 0; i < batch_size; ++i)
 		free(a[i]);
 	free(a);
