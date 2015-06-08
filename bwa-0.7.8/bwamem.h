@@ -8,6 +8,11 @@
 #define MEM_MAPQ_COEF 30.0
 #define MEM_MAPQ_MAX  60
 
+// comaniac: Batched BWT process.
+#define BWT_BATCHED_INIT	0
+#define BWT_BATCHED_FREE  1
+#define BWT_BATCHED_DO	  2
+
 //typedef struct __smem_i smem_i;
 typedef struct __smem_i {
 	const bwt_t *bwt;
@@ -167,6 +172,10 @@ extern "C" {
 	 * @param pes    inferred insert size distribution (output)
 	 */
 	void mem_pestat(const mem_opt_t *opt, int64_t l_pac, int n, const mem_alnreg_v *regs, mem_pestat_t pes[4]);
+
+	// comanaic: Batched BWT process.
+	void bwt_batched_init(int batch_size);
+	void bwt_batched_free(int batch_size);
 
 #ifdef __cplusplus
 }

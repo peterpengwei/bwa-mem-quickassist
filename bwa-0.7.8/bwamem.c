@@ -108,19 +108,39 @@ void smem_set_query(smem_i *itr, int len, const uint8_t *query)
 
 // comaniac: Batched BWT process.
 void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len, int split_width, int start_width, 
-		int batch_size, const int *done)
+		int batch_size, const int *done, int bwt_batched_status)
 {
 	int batch_idx;
 	int i;
 
-	int *max = (int *)calloc(batch_size, sizeof(int));
-	int *max_i = (int *)calloc(batch_size, sizeof(int));
-	int *ori_start = (int *)calloc(batch_size, sizeof(int));
-	int *local_done = (int *)calloc(batch_size, sizeof(int));
+	static __thread int *max;
+	static __thread int *max_i;
+	static __thread int *ori_start;
+	static __thread int *local_done;
+
+	if (bwt_batched_status == BWT_BATCHED_INIT) {
+		max = (int *)malloc(batch_size * sizeof(int));
+		max_i = (int *)malloc(batch_size * sizeof(int));
+		ori_start = (int *)malloc(batch_size * sizeof(int));
+		local_done = (int *)malloc(batch_size * sizeof(int));
+		return ;
+	}
+	else if (bwt_batched_status == BWT_BATCHED_FREE) {
+		free(ori_start);
+		free(max);
+		free(max_i);
+		free(local_done);
+		return ;
+	}
+
+	// comaniac: Init here
+	memset(max, 0, sizeof(int) * batch_size);
+	memset(max_i, 0, sizeof(int) * batch_size);
+	memset(ori_start, 0, sizeof(int) * batch_size);
 
 	// comaniac: Use local_done in the rest of this function
 	memcpy(local_done, done, sizeof(int) * batch_size);
-
+	
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (done[batch_idx])
 			continue;
@@ -149,7 +169,7 @@ void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len,
 	}
 
 	// search for SMEM
-	bwt_smem1_batched(itr, ori_start, NULL, start_width, 0, batch_size, local_done);
+	bwt_smem1_batched(itr, ori_start, NULL, start_width, 0, batch_size, local_done, BWT_BATCHED_DO);
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (local_done[batch_idx])
@@ -181,7 +201,7 @@ void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len,
 	}
 
 	// starting from the middle of the longest MEM
-	bwt_smem1_batched(itr, ori_start, max_i, start_width, 1, batch_size, local_done);
+	bwt_smem1_batched(itr, ori_start, max_i, start_width, 1, batch_size, local_done, BWT_BATCHED_DO);
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) { 
 		if (local_done[batch_idx])
@@ -217,10 +237,6 @@ void smem_next2_batched(const bwtintv_v **match_a, smem_i **itr, int *split_len,
 		match_a[batch_idx] = itr[batch_idx]->matches;
 	} // end for batch_idx
 
-	free(ori_start);
-	free(max);
-	free(max_i);
-	free(local_done);
 	return ;
 }
 
@@ -339,17 +355,30 @@ static int test_and_merge(const mem_opt_t *opt, int64_t l_pac, mem_chain_t *c, c
 
 // comaniac: Batched BWT process.
 static void mem_insert_seed_batched(const mem_opt_t *opt, int64_t l_pac, kbtree_t(chn) **tree, 
-		smem_i **itr, int batch_size, const int *done)
+		smem_i **itr, int batch_size, const int *done, int bwt_batched_status)
 {
-	int start_width = (opt->flag & MEM_F_NO_EXACT)? 2 : 1;
+	int start_width;
 	int batch_idx;
-
 	int all_done = 0;
-	int *local_done = (int *)malloc(sizeof(int) * batch_size);
-	memcpy(local_done, done, sizeof(int) * batch_size);
 
-	const bwtintv_v **a = (const bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
-	int *split_len = (int *)malloc(sizeof(int) * batch_size);
+	static __thread int *local_done;
+	static __thread const bwtintv_v **a;
+	static __thread int *split_len;
+
+	if (bwt_batched_status == BWT_BATCHED_INIT) {
+		a = (const bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
+		split_len = (int *)malloc(sizeof(int) * batch_size);
+		local_done = (int *)malloc(sizeof(int) * batch_size);
+		return ;
+	}
+	else if (bwt_batched_status == BWT_BATCHED_FREE) {
+		free(a);
+		free(split_len);
+		free(local_done);
+		return ;
+	}
+	memcpy(local_done, done, sizeof(int) * batch_size);
+	start_width = (opt->flag & MEM_F_NO_EXACT)? 2 : 1;
 
 	int split_len_init = (int)(opt->min_seed_len * opt->split_factor + .499);
 	for(batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
@@ -361,7 +390,7 @@ static void mem_insert_seed_batched(const mem_opt_t *opt, int64_t l_pac, kbtree_
 	while (!all_done) {
 		all_done = 1;
 
-		smem_next2_batched(a, itr, split_len, opt->split_width, start_width, batch_size, local_done);
+		smem_next2_batched(a, itr, split_len, opt->split_width, start_width, batch_size, local_done, BWT_BATCHED_DO);
 
 		for(batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 			if (local_done[batch_idx])
@@ -417,10 +446,6 @@ static void mem_insert_seed_batched(const mem_opt_t *opt, int64_t l_pac, kbtree_
 			} // end for i
 		} // end for batch_idx
 	} // end while
-
-	free(a);
-	free(split_len);
-	free(local_done);
 
 	return ;
 }
@@ -514,13 +539,27 @@ void mem_print_chain(const bntseq_t *bns, mem_chain_v *chn)
 }
 
 // comaniac: Batched BWT process.
-void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t *bwt, int64_t l_pac, bseq1_t *seqs, int start, int batch_size)
+void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t *bwt, int64_t l_pac, bseq1_t *seqs, int start, int batch_size, int batched_status)
 {
-	kbtree_t(chn) **tree = (kbtree_t(chn) **)malloc(sizeof(kbtree_t(chn) *) * batch_size);
-	smem_i **itr = (smem_i **)malloc(sizeof(smem_i *) * batch_size);
-	int *done = (int *)calloc(batch_size, sizeof(int));
+	static __thread kbtree_t(chn) **tree;
+	static __thread smem_i **itr;
+	static __thread int *done;
+
+	if (batched_status == BWT_BATCHED_INIT) {
+		tree = (kbtree_t(chn) **)malloc(sizeof(kbtree_t(chn) *) * batch_size);
+		itr = (smem_i **)malloc(sizeof(smem_i *) * batch_size);
+		done = (int *)calloc(batch_size, sizeof(int));
+		return ;
+	}
+	else if (batched_status == BWT_BATCHED_FREE) {
+		free(tree);
+		free(itr);
+		free(done);
+		return;
+	}
 
 	int batch_idx;
+	memset(done, 0, sizeof(int) * batch_size);
 
 	for (batch_idx = 0; batch_idx < batch_size; batch_idx++) {
 		kv_init(chn_batch[batch_idx]);
@@ -533,7 +572,7 @@ void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t
 		smem_set_query(itr[batch_idx], seqs[start + batch_idx].l_seq, (const uint8_t *) seqs[start + batch_idx].seq);
 	}
 
-	mem_insert_seed_batched(opt, l_pac, tree, itr, batch_size, done);
+	mem_insert_seed_batched(opt, l_pac, tree, itr, batch_size, done, BWT_BATCHED_DO);
 	
 	for (batch_idx = 0; batch_idx < batch_size; batch_idx++) {
 		if (done[batch_idx])
@@ -548,7 +587,6 @@ void mem_chain_batched(mem_chain_v *chn_batch, const mem_opt_t *opt, const bwt_t
 		kb_destroy(chn, tree[batch_idx]);
 	}
 	
-	free(done);
 	return ;
 }
 
@@ -1361,14 +1399,16 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 	mem_chain_v* chn_batch = (mem_chain_v*)malloc(sizeof(mem_chain_v)*batch_size);
 	mem_alnreg_v* regs_batch = (mem_alnreg_v*)malloc(sizeof(mem_alnreg_v)*batch_size);
 
-	// comaniac: bwt_batched_tag
+	// comaniac: bwt_batched
 	for (batch_idx=start; batch_idx<start+batch_size; batch_idx++) {
 		for (i = 0; i < seqs[batch_idx].l_seq; ++i) // convert to 2-bit encoding if we have not done so
 			seqs[batch_idx].seq[i] = seqs[batch_idx].seq[i] < 4? seqs[batch_idx].seq[i] : nst_nt4_table[(int)(seqs[batch_idx].seq[i])];
 	}
 
-	// comaniac: bwt_batched_tag
-	mem_chain_batched(chn_batch, opt, bwt, bns->l_pac, seqs, start, batch_size);
+	// comaniac: bwt_batched
+	bwt_batched_init(batch_size);
+	mem_chain_batched(chn_batch, opt, bwt, bns->l_pac, seqs, start, batch_size, BWT_BATCHED_DO);
+	bwt_batched_free(batch_size);
 
 	for (batch_idx=start; batch_idx<start+batch_size; batch_idx++) {
 		chn_batch[batch_idx-start].n = mem_chain_flt(opt, chn_batch[batch_idx-start].n, chn_batch[batch_idx-start].a);
@@ -1597,3 +1637,25 @@ void mem_process_seqs(const mem_opt_t *opt, const bwt_t *bwt, const bntseq_t *bn
 	if (bwa_verbose >= 3)
 		fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
 }
+
+// comaniac: Batched BWT process.
+void bwt_batched_init(int batch_size)
+{
+	mem_chain_batched(NULL, NULL, NULL, 0, NULL, 0, batch_size, BWT_BATCHED_INIT);
+	mem_insert_seed_batched(NULL, 0, NULL, NULL, batch_size, 0, BWT_BATCHED_INIT);
+	smem_next2_batched(NULL, NULL, NULL, 0, 0, batch_size, NULL, BWT_BATCHED_INIT);
+	bwt_smem1_batched(NULL, NULL, NULL, 0, 0, batch_size, NULL, BWT_BATCHED_INIT);
+
+	return ;
+}
+
+void bwt_batched_free(int batch_size)
+{
+	mem_chain_batched(NULL, NULL, NULL, 0, NULL, 0, batch_size, BWT_BATCHED_FREE);
+	mem_insert_seed_batched(NULL, 0, NULL, NULL, batch_size, 0, BWT_BATCHED_FREE);
+	smem_next2_batched(NULL, NULL, NULL, 0, 0, batch_size, NULL, BWT_BATCHED_FREE);
+	bwt_smem1_batched(NULL, NULL, NULL, 0, 0, batch_size, NULL, BWT_BATCHED_FREE);
+
+	return ;
+}
+

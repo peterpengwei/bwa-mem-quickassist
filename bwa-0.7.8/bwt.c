@@ -416,19 +416,62 @@ static void bwt_reverse_intvs(bwtintv_v *p)
 }
 
 // comaniac: Batched BWT process.
-void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width, int is_middle, int batch_size, const int *done)
+void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width, 
+	int is_middle, int batch_size, const int *done, int bwt_batched_status)
 {
 	#define PREV	0
 	#define CURR	1
 
-	int batch_idx;
-	int *min_intv = (int *)malloc(sizeof(int) * batch_size);
-	int *x = (int *)malloc(sizeof(int) * batch_size);
-	bwtintv_v **mem = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
-	int *local_done = (int *)malloc(sizeof(int) * batch_size);
-	memcpy(local_done, done, sizeof(int) * batch_size);
+	int batch_idx, i;
 
-	int i;
+	static __thread int *min_intv;
+	static __thread int *x;
+	static __thread bwtintv_v **mem;
+	static __thread int *local_done;
+
+	static __thread bwtintv_t *ik;
+	static __thread bwtintv_t **ok;
+	static __thread bwtintv_v ***intv;
+	static __thread bwtintv_v **a;
+
+	if (bwt_batched_status == BWT_BATCHED_INIT) {
+		min_intv = (int *)malloc(sizeof(int) * batch_size);
+		x = (int *)malloc(sizeof(int) * batch_size);
+		mem = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
+		local_done = (int *)malloc(sizeof(int) * batch_size);
+	
+		ik = (bwtintv_t *)malloc(sizeof(bwtintv_t) * batch_size);
+		ok = (bwtintv_t **)malloc(sizeof(bwtintv_t *) * batch_size);;
+		for (i = 0; i < batch_size; ++i)
+			ok[i] = (bwtintv_t *)malloc(sizeof(bwtintv_t) * 4);
+	
+		intv = (bwtintv_v ***)malloc(sizeof(bwtintv_v **) * 2);
+		for (i = 0; i < 2; ++i)	
+			intv[i] = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
+	
+		a = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
+		for (i = 0; i < batch_size; ++i)
+			a[i] = (bwtintv_v *)malloc(sizeof(bwtintv_v) * 2);
+		return ;
+	} else if (bwt_batched_status == BWT_BATCHED_FREE) {
+		free(local_done);
+		free(ik);
+		for (i = 0; i < 2; ++i)
+			free(intv[i]);
+		free(intv);
+		for (i = 0; i < batch_size; ++i)
+			free(a[i]);
+		free(a);
+		for (i = 0; i < batch_size; ++i)
+			free(ok[i]);
+		free(ok);
+		free(min_intv);
+		free(x);
+		return ;
+	}
+
+	// comaniac: Init here
+	memcpy(local_done, done, sizeof(int) * batch_size);
 
 	if (!is_middle) {
 		memcpy(x, ori_start, sizeof(int) * batch_size);
@@ -442,20 +485,6 @@ void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width
 			mem[batch_idx] = itr[batch_idx]->sub;
 		}
 	}
-
-	// Allocate tempaoary memory for batch.
-	bwtintv_t *ik = (bwtintv_t *)malloc(sizeof(bwtintv_t) * batch_size);
-	bwtintv_t **ok = (bwtintv_t **)malloc(sizeof(bwtintv_t *) * batch_size);;
-	for (i = 0; i < batch_size; ++i)
-		ok[i] = (bwtintv_t *)malloc(sizeof(bwtintv_t) * 4);
-
-	bwtintv_v ***intv = (bwtintv_v ***)malloc(sizeof(bwtintv_v **) * 2);
-	for (i = 0; i < 2; ++i)	
-		intv[i] = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);
-
-	bwtintv_v **a = (bwtintv_v **)malloc(sizeof(bwtintv_v *) * batch_size);;
-	for (i = 0; i < batch_size; ++i)
-		a[i] = (bwtintv_v *)malloc(sizeof(bwtintv_v) * 2);
 
 	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
 		if (local_done[batch_idx])
@@ -515,19 +544,6 @@ void bwt_smem1_batched(smem_i **itr, int *ori_start, int *max_i, int start_width
 			free(a[batch_idx][1].a);
 	}
 
-	free(local_done);
-	free(ik);
-	for (i = 0; i < 2; ++i)
-		free(intv[i]);
-	free(intv);
-	for (i = 0; i < batch_size; ++i)
-		free(a[i]);
-	free(a);
-	for (i = 0; i < batch_size; ++i)
-		free(ok[i]);
-	free(ok);
-	free(min_intv);
-	free(x);
 	return ;
 }
 

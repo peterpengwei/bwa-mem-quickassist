@@ -2,33 +2,27 @@
 
 # New pipeline as of 2013-10-22.
 
-# n10 data path
-ROOT=/genomics
+# gene1 data path
+ROOT=/home/hadoopmaster/genomics
 
 BWA=$HOME/genomics/bwa-mem-quickassist/bwa-0.7.8/bwa
 BWA_GOLDEN=$HOME/genomics/bwa_golden
-BWA_MASTER=$HOME/genomics/bwa_master
-#BWA=$ROOT/bwa-0.7.8/bwa
-#SAMTOOLS=$ROOT/samtools-0.1.19/samtools
-#PICARD=$ROOT/picard-tools-1.79
-#GATK=$ROOT/gatk-protected-master/dist/GenomeAnalysisTK.jar
 
-REF=$ROOT/data/ReferenceMetadata
+REF=$ROOT/ReferenceMetadata
 FASTA=$REF/human_g1k_v37.fasta
 FAI=$FASTA.fai
 DBSNP=$REF/dbsnp-all.vcf
 DBINDEL=$REF/1000G_phase1.indels.b37.vcf
-IDIR=$ROOT/data/HCC1954_small
+IDIR=$ROOT/InputFiles
 INFILE=HCC1954
-ODIR=/home/cody
-NTHREAD=40 # n10 has 40 threads
+ODIR=/tmp/cody
+NTHREAD=24 # gene1 has 24 threads
 NCTHREAD=4
-NBATCH_SIZE=30
+NBATCH_SIZE=300
 
 HDR=`printf "'@RG\tID:%s\tLB:%s\tSM:%s'" $INFILE $INFILE $INFILE`
 READ_SIZE=100M
 IN1=$IDIR/${INFILE}_1_${READ_SIZE}reads.fq
-IN2=$IDIR/${INFILE}_2.fq
 OFILE=$ODIR/$INFILE
 SAMFILE=${OFILE}_dut.sam
 UNSORTED=$OFILE.unsorted.bam
