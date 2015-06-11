@@ -57,7 +57,9 @@ static int usage()
 	return 1;
 }
 
-int main(int argc, char *argv[])
+// [QA] A wrapper of the original BWA main function
+int bwa_main(int argc, char *argv[])
+//int main(int argc, char *argv[])
 {
 	int i, ret;
 	double t_real;
