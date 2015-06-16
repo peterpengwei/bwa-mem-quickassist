@@ -1,13 +1,13 @@
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif // HAVE_CONFIG_H
+
+# include <config.h>
+
 #include <stdio.h>
 #include <assert.h>
 
-#include <aalsdk/ccilib/CCILib.h>
-#include <aalsdk/aalclp/aalclp.h>
-
-/* Real one, comment for testing
+// Real one, comment for testing
 #ifdef STDC_HEADERS
 # include <stdlib.h>
 # include <stddef.h>
@@ -18,10 +18,11 @@
 #    error Required system header stdlib.h not found.
 # endif // HAVE_STDLIB_H
 #endif // STDC_HEADERS
-*/
+
 //just for testing, should be deleted
-# include <stdlib.h>
-# include <stddef.h>
+// # include <stdlib.h>
+// # include <stddef.h>
+// # include <config.h>
 
 
 #ifdef HAVE_STRING_H
@@ -41,6 +42,13 @@
 
 #include "qa_top.h"
 
+#include <aalsdk/ccilib/CCILib.h>
+#include <aalsdk/aalclp/aalclp.h>
+
+USING_NAMESPACE(std)
+USING_NAMESPACE(AAL)
+USING_NAMESPACE(CCILib)
+
 extern "C" {
 #include "batch.h"
 	void extension(int8_t* input_space, int8_t* output_space);
@@ -49,11 +57,6 @@ extern "C" {
 	void releaseBatchSpace(batch*);
 }
 
-//USING_NAMESPACE(std)
-//USING_NAMESPACE(AAL)
-//USING_NAMESPACE(CCILib)
-
-/*
 ///////////////////////////////////////////////
 BEGIN_C_DECLS
 
@@ -97,7 +100,7 @@ int verifycmds(struct CCIDemoCmdLine * );
 
 END_C_DECLS
 ///////////////////////////////////////////////
-*/
+
 
 // global variables
 // ? Do we need recursive lock
@@ -235,7 +238,7 @@ execution_fpga(void* data)
 
 int main(int argc, char *argv[])
 {
-/*
+
     if (argc < 2) {
         showhelp(stdout, &_aalclp_gcs_data);
         return 1;
@@ -247,105 +250,106 @@ int main(int argc, char *argv[])
     } else if (verifycmds(&gCCIDemoCmdLine)) {
         return 3;
     }
+    cout << "AAL command parsed." << endl;
 
-    const CCIDeviceImplementation CCIDevImpl = gCCIDemoCmdLine.target;
+//     const CCIDeviceImplementation CCIDevImpl = gCCIDemoCmdLine.target;
 
-    ICCIDeviceFactory *pCCIDevFactory = GetCCIDeviceFactory(CCIDevImpl);
+//     ICCIDeviceFactory *pCCIDevFactory = GetCCIDeviceFactory(CCIDevImpl);
 
-    ICCIDevice *pCCIDevice = pCCIDevFactory->CreateCCIDevice();
+//     ICCIDevice *pCCIDevice = pCCIDevFactory->CreateCCIDevice();
 
-#if (1 == ENABLE_DEBUG)
-    pCCIDevice->GetSynchronizer()->SetLogLevel(gCCIDemoCmdLine.log);
-    pCCIDevice->GetSynchronizer()->SetTraceLevel(gCCIDemoCmdLine.trace);
-#endif // ENABLE_DEBUG
+// #if (1 == ENABLE_DEBUG)
+//     pCCIDevice->GetSynchronizer()->SetLogLevel(gCCIDemoCmdLine.log);
+//     pCCIDevice->GetSynchronizer()->SetTraceLevel(gCCIDemoCmdLine.trace);
+// #endif // ENABLE_DEBUG
 
-    ICCIWorkspace *pDSMWorkspace    = pCCIDevice->AllocateWorkspace(BWA_DSM_SIZE);
-    ICCIWorkspace *pInputWorkspace  = pCCIDevice->AllocateWorkspace(BWA_INPUT_BUFFER_SIZE * BWA_NUM_BATCHES);
-    ICCIWorkspace *pOutputWorkspace = pCCIDevice->AllocateWorkspace(BWA_OUTPUT_BUFFER_SIZE * BWA_NUM_BATCHES);
+//     ICCIWorkspace *pDSMWorkspace    = pCCIDevice->AllocateWorkspace(BWA_DSM_SIZE);
+//     ICCIWorkspace *pInputWorkspace  = pCCIDevice->AllocateWorkspace(BWA_INPUT_BUFFER_SIZE * BWA_NUM_BATCHES);
+//     ICCIWorkspace *pOutputWorkspace = pCCIDevice->AllocateWorkspace(BWA_OUTPUT_BUFFER_SIZE * BWA_NUM_BATCHES);
 
-    volatile btVirtAddr pInputUsrVirt  = pInputWorkspace->GetUserVirtualAddress(); 
-    volatile btVirtAddr pOutputUsrVirt = pOutputWorkspace->GetUserVirtualAddress();
-    volatile btVirtAddr pDSMUsrVirt    = pDSMWorkspace->GetUserVirtualAddress();
+//     volatile btVirtAddr pInputUsrVirt  = pInputWorkspace->GetUserVirtualAddress(); 
+//     volatile btVirtAddr pOutputUsrVirt = pOutputWorkspace->GetUserVirtualAddress();
+//     volatile btVirtAddr pDSMUsrVirt    = pDSMWorkspace->GetUserVirtualAddress();
 
-    // [QA] Initialize the batch list and the free list
-    batchListDummyHead = new batch;
-    batchListDummyHead->next = NULL;
-    batchListDummyHead->prev = NULL;
-    batchListTail = batchListDummyHead;
+//     // [QA] Initialize the batch list and the free list
+//     batchListDummyHead = new batch;
+//     batchListDummyHead->next = NULL;
+//     batchListDummyHead->prev = NULL;
+//     batchListTail = batchListDummyHead;
 
-    freeListDummyHead = new batch;
-    freeListDummyHead->next = NULL;
-    freeListDummyHead->prev = NULL;
-    freeListTail = freeListDummyHead;
-    for (int k=0; k<BWA_NUM_BATCHES; k++) {
-        freeListTail->next = new batch;
-	freeListTail->next->prev = freeListTail;
-        freeListTail = freeListTail->next;
-        freeListTail->inputValid = 0;
-        freeListTail->outputValid = 0;
-        freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
-        freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
-	freeListTail->next = NULL;
-    }
+//     freeListDummyHead = new batch;
+//     freeListDummyHead->next = NULL;
+//     freeListDummyHead->prev = NULL;
+//     freeListTail = freeListDummyHead;
+//     for (int k=0; k<BWA_NUM_BATCHES; k++) {
+//         freeListTail->next = new batch;
+// 	freeListTail->next->prev = freeListTail;
+//         freeListTail = freeListTail->next;
+//         freeListTail->inputValid = 0;
+//         freeListTail->outputValid = 0;
+//         freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
+//         freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
+// 	freeListTail->next = NULL;
+//     }
 
-    memset((void *)pOutputUsrVirt, 0, pOutputWorkspace->GetSizeInBytes());
-    memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
+//     memset((void *)pOutputUsrVirt, 0, pOutputWorkspace->GetSizeInBytes());
+//     memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
 
-    bt32bitCSR i;
-    bt32bitCSR csr;
+//     bt32bitCSR i;
+//     bt32bitCSR csr;
 
-    // Assert CAFU Reset
-    csr = 0;
-    pCCIDevice->GetCSR(CSR_CIPUCTL, &csr);
-    csr |= 0x01000000;
-    pCCIDevice->SetCSR(CSR_CIPUCTL, csr);
+//     // Assert CAFU Reset
+//     csr = 0;
+//     pCCIDevice->GetCSR(CSR_CIPUCTL, &csr);
+//     csr |= 0x01000000;
+//     pCCIDevice->SetCSR(CSR_CIPUCTL, csr);
 
-    // De-assert CAFU Reset
-    csr = 0;
-    pCCIDevice->GetCSR(CSR_CIPUCTL, &csr);
-    csr &= ~0x01000000;
-    pCCIDevice->SetCSR(CSR_CIPUCTL, csr);
+//     // De-assert CAFU Reset
+//     csr = 0;
+//     pCCIDevice->GetCSR(CSR_CIPUCTL, &csr);
+//     csr &= ~0x01000000;
+//     pCCIDevice->SetCSR(CSR_CIPUCTL, csr);
 
-    // Set DSM base, high then low
-    pCCIDevice->SetCSR(CSR_AFU_DSM_BASEH, pDSMWorkspace->GetPhysicalAddress() >> 32);
-    pCCIDevice->SetCSR(CSR_AFU_DSM_BASEL, pDSMWorkspace->GetPhysicalAddress() & 0xffffffff);
+//     // Set DSM base, high then low
+//     pCCIDevice->SetCSR(CSR_AFU_DSM_BASEH, pDSMWorkspace->GetPhysicalAddress() >> 32);
+//     pCCIDevice->SetCSR(CSR_AFU_DSM_BASEL, pDSMWorkspace->GetPhysicalAddress() & 0xffffffff);
 
-    // Poll for AFU ID
-    do
-    {
-        csr = *(volatile btUnsigned32bitInt *)pDSMUsrVirt;
-    } while( 0 == csr );
+//     // Poll for AFU ID
+//     do
+//     {
+//         csr = *(volatile btUnsigned32bitInt *)pDSMUsrVirt;
+//     } while( 0 == csr );
 
-    // Print the AFU ID
-    cout << "AFU ID=";
-    for ( i = 0 ; i < 4 ; ++i ) {
-        cout << std::setw(8) << std::hex << std::setfill('0')
-            << *(btUnsigned32bitInt *)(pDSMUsrVirt + (3 - i) * sizeof(btUnsigned32bitInt));
-    }
+//     // Print the AFU ID
+//     cout << "AFU ID=";
+//     for ( i = 0 ; i < 4 ; ++i ) {
+//         cout << std::setw(8) << std::hex << std::setfill('0')
+//             << *(btUnsigned32bitInt *)(pDSMUsrVirt + (3 - i) * sizeof(btUnsigned32bitInt));
+//     }
 
-    // Assert Device Reset
-    pCCIDevice->SetCSR(CSR_CTL, 0);
+//     // Assert Device Reset
+//     pCCIDevice->SetCSR(CSR_CTL, 0);
 
-    // Clear the DSM
-    memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
+//     // Clear the DSM
+//     memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
 
-    // De-assert Device Reset
-    pCCIDevice->SetCSR(CSR_CTL, 1);
+//     // De-assert Device Reset
+//     pCCIDevice->SetCSR(CSR_CTL, 1);
 
-    // Set input workspace address
-    pCCIDevice->SetCSR(CSR_SRC_ADDR, CACHELINE_ALIGNED_ADDR(pInputWorkspace->GetPhysicalAddress()));
+//     // Set input workspace address
+//     pCCIDevice->SetCSR(CSR_SRC_ADDR, CACHELINE_ALIGNED_ADDR(pInputWorkspace->GetPhysicalAddress()));
 
-    // Set output workspace address
-    pCCIDevice->SetCSR(CSR_DST_ADDR,  CACHELINE_ALIGNED_ADDR(pOutputWorkspace->GetPhysicalAddress()));
+//     // Set output workspace address
+//     pCCIDevice->SetCSR(CSR_DST_ADDR,  CACHELINE_ALIGNED_ADDR(pOutputWorkspace->GetPhysicalAddress()));
 
-    // Set the test mode
-    pCCIDevice->SetCSR(CSR_CFG,       0);
+//     // Set the test mode
+//     pCCIDevice->SetCSR(CSR_CFG,       0);
 
-    volatile bt32bitCSR *StatusAddr = (volatile bt32bitCSR *)
-                                    (pDSMUsrVirt  + DSM_STATUS_TEST_COMPLETE);
-    // Start the test
-    pCCIDevice->SetCSR(CSR_CTL,      0x3);
-*/
+//     volatile bt32bitCSR *StatusAddr = (volatile bt32bitCSR *)
+//                                     (pDSMUsrVirt  + DSM_STATUS_TEST_COMPLETE);
+//     // Start the test
+//     pCCIDevice->SetCSR(CSR_CTL,      0x3);
+
 
     int8_t pInputUsrVirt[BWA_INPUT_BUFFER_SIZE * BWA_NUM_BATCHES]; 
     int8_t pOutputUsrVirt[BWA_OUTPUT_BUFFER_SIZE * BWA_NUM_BATCHES];
@@ -382,7 +386,8 @@ int main(int argc, char *argv[])
     const char* exe_message = "Execution Thread on FPGA";
     pthread_create(&exe_thread, NULL, execution_fpga, (void*) exe_message);
 
-    bwa_main(argc, argv);
+    /* skip the first command */
+    bwa_main(argc - 1, argv + 1);
 
     batch* p = NULL;
     while (batchListDummyHead) {
@@ -399,7 +404,7 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-/*
+
 BEGIN_C_DECLS
 
 int ccidemo_on_nix_long_option_only(AALCLP_USER_DEFINED user, const char *option)
@@ -545,4 +550,4 @@ int verifycmds(struct CCIDemoCmdLine *cl)
 }
 
 END_C_DECLS
-*/
+

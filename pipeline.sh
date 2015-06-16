@@ -3,7 +3,7 @@
 # New pipeline as of 2013-10-22.
 
 ROOT=/cdsc_nfs/cdsc0/software/spark
-BWA=$ROOT/bwa-mem-quickassist/bwa-0.7.8/bwa
+BWA=/curr/haoyc/bwa-mem-quickassist/bwa-0.7.8/bwa
 #BWA=$ROOT/bwa-0.7.8/bwa
 #SAMTOOLS=$ROOT/samtools-0.1.19/samtools
 #PICARD=$ROOT/picard-tools-1.79
@@ -16,7 +16,8 @@ DBSNP=$REF/dbsnp-all.vcf
 DBINDEL=$REF/1000G_phase1.indels.b37.vcf
 IDIR=$ROOT/genomics_data
 INFILE=HCC1954
-ODIR=$ROOT/genomics_data
+# ODIR=$ROOT/genomics_data
+ODIR=/curr/haoyc
 NTHREAD=4
 NCTHREAD=4
 NBATCH_SIZE=10
@@ -68,7 +69,7 @@ WRAPPER() {
 
 # Align sequences with BWA
 #WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
-WRAPPER "bwamem" "$BWA mem -t $NTHREAD -b $NBATCH_SIZE -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
+WRAPPER "bwamem" "$BWA --target=ASE mem -t $NTHREAD -b $NBATCH_SIZE -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
 ##WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 $IN2 > $SAMFILE"
 ##
 ### Convert SAM to BAM

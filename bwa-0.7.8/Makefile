@@ -34,22 +34,32 @@ QSufSort.c \
 utils.c
 
 SOURCE_CPP := qa_top.cc
+AAL_SRCDIR := /curr/haoyc/aalsdk_splrm-4.1.0/aalsdk_splrm-4.1.0
+AAL_BUILDDIR := /curr/haoyc/aalsdk_splrm-4.1.0/aalsdk_splrm-4.1.0/mybuild
 
 COBJECTS := $(patsubst %.c, %.o, $(SOURCES))
 CCOBJECTS := $(patsubst %.cc, %.o, $(SOURCE_CPP))
 LIBPATH := .
 
-INC=-I/curr/haoyc/aalsdk_splrm-4.1.0/aalsdk_splrm-4.1.0/include
+AAL_INC=\
+-I$(AAL_SRCDIR)/include \
+-I$(AAL_BUILDDIR)
+
+AAL_LDADD=\
+$(AAL_BUILDDIR)/aas/OSAL/libOSAL.la \
+$(AAL_BUILDDIR)/aas/AASLib/libAAS.la \
+$(AAL_BUILDDIR)/CCILib/libCCI.la \
+$(AAL_BUILDDIR)/clp/libaalclp.la
 
 CXX = gcc
-CXXFLAGS    = -g -Wall -Wno-unused-function -O2 $(INC)
+CXXFLAGS    = -g -Wall -Wno-unused-function -O2 $(AAL_INC)
 WRAP_MALLOC = -DUSE_MALLOC_WRAPPERS
 LDFLAGS     = -DHAVE_PTHREAD $(WRAP_MALLOC) -lm -lz -lpthread -lstdc++
 
 all: $(TARGET)
 
 $(TARGET): $(COBJECTS) $(CCOBJECTS)
-	g++ $(CFLAGS) *.o -o $(TARGET) $(LDFLAGS)
+	libtool --mode=link g++ $(CFLAGS) *.o -o $(TARGET) $(LDFLAGS) $(AAL_LDADD)
 
 $(COBJECTS): %.o: %.c
 	$(CXX) -c $(CXXFLAGS) -o $@ $<
