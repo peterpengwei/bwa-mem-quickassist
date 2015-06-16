@@ -39,8 +39,10 @@ COBJECTS := $(patsubst %.c, %.o, $(SOURCES))
 CCOBJECTS := $(patsubst %.cc, %.o, $(SOURCE_CPP))
 LIBPATH := .
 
+INC=-I/curr/haoyc/aalsdk_splrm-4.1.0/aalsdk_splrm-4.1.0/include
+
 CXX = gcc
-CXXFLAGS    = -g -Wall -Wno-unused-function -O2
+CXXFLAGS    = -g -Wall -Wno-unused-function -O2 $(INC)
 WRAP_MALLOC = -DUSE_MALLOC_WRAPPERS
 LDFLAGS     = -DHAVE_PTHREAD $(WRAP_MALLOC) -lm -lz -lpthread -lstdc++
 

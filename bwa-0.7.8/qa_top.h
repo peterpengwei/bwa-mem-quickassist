@@ -1,9 +1,6 @@
 #ifndef QA_TOP_H
 #define QA_TOP_H
 
-//#include <aalsdk/ccilib/CCILib.h>
-//#include <aalsdk/aalclp/aalclp.h>
-
 #ifndef CL
 # define CL(x)                     ((x) * 64)
 #endif // CL

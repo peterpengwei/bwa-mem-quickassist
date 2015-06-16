@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include <aalsdk/ccilib/CCILib.h>
+#include <aalsdk/aalclp/aalclp.h>
+
 /* Real one, comment for testing
 #ifdef STDC_HEADERS
 # include <stdlib.h>
