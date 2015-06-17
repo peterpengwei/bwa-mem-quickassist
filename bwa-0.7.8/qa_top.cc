@@ -200,37 +200,37 @@ execution_fpga(void* data)
     batch* next_batch = NULL;
 
     while (1) {
-	// 1st: wait for a valid input
+        // 1st: wait for a valid input
         rc = pthread_mutex_lock(&batchListLock);
         while (batchListDummyHead == NULL || batchListDummyHead->next == NULL || batchListDummyHead->next->inputValid == 0) {
-	    rc = pthread_cond_wait(&inputReady, &batchListLock);
-	}
+            rc = pthread_cond_wait(&inputReady, &batchListLock);
+        }
 
-	// 2nd: remove the node from the batch list
-	cur_batch = batchListDummyHead->next;
-	assert (cur_batch->inputValid && !cur_batch->outputValid);
-	// cond 1: the current batch is the tail
-	if (cur_batch == batchListTail) {
-		//then, remove the only node from the batch list
-		batchListDummyHead->next = NULL;
-		batchListTail = batchListDummyHead;
-	}
-	// cond 2: the current batch is not the tail
-	else {
-		//then, remove the current node
-		next_batch = cur_batch->next;
-		batchListDummyHead->next = next_batch;
-		next_batch->prev = batchListDummyHead;
-	}
+        // 2nd: remove the node from the batch list
+        cur_batch = batchListDummyHead->next;
+        assert (cur_batch->inputValid && !cur_batch->outputValid);
+        // cond 1: the current batch is the tail
+        if (cur_batch == batchListTail) {
+            //then, remove the only node from the batch list
+            batchListDummyHead->next = NULL;
+            batchListTail = batchListDummyHead;
+        }
+        // cond 2: the current batch is not the tail
+        else {
+            //then, remove the current node
+            next_batch = cur_batch->next;
+            batchListDummyHead->next = next_batch;
+            next_batch->prev = batchListDummyHead;
+        }
         rc = pthread_mutex_unlock(&batchListLock);
 
-	// after remove this node, do the extension
-	extension((int8_t*)cur_batch->inputAddr, (int8_t*)cur_batch->outputAddr);
+        // after remove this node, do the extension
+        extension((int8_t*)cur_batch->inputAddr, (int8_t*)cur_batch->outputAddr);
 
-	// validate output and send conditional signal
+        // validate output and send conditional signal
         rc = pthread_mutex_lock(&cur_batch->batchNodeLock);
-	cur_batch->outputValid = 1;
-	pthread_cond_signal(&cur_batch->outputReady);
+        cur_batch->outputValid = 1;
+        pthread_cond_signal(&cur_batch->outputReady);
         rc = pthread_mutex_unlock(&cur_batch->batchNodeLock);
     }
     return NULL;
@@ -252,24 +252,24 @@ int main(int argc, char *argv[])
     }
     cout << "AAL command parsed." << endl;
 
-//     const CCIDeviceImplementation CCIDevImpl = gCCIDemoCmdLine.target;
+    const CCIDeviceImplementation CCIDevImpl = gCCIDemoCmdLine.target;
 
-//     ICCIDeviceFactory *pCCIDevFactory = GetCCIDeviceFactory(CCIDevImpl);
+    ICCIDeviceFactory *pCCIDevFactory = GetCCIDeviceFactory(CCIDevImpl);
 
-//     ICCIDevice *pCCIDevice = pCCIDevFactory->CreateCCIDevice();
+    ICCIDevice *pCCIDevice = pCCIDevFactory->CreateCCIDevice();
 
-// #if (1 == ENABLE_DEBUG)
-//     pCCIDevice->GetSynchronizer()->SetLogLevel(gCCIDemoCmdLine.log);
-//     pCCIDevice->GetSynchronizer()->SetTraceLevel(gCCIDemoCmdLine.trace);
-// #endif // ENABLE_DEBUG
+#if (1 == ENABLE_DEBUG)
+    pCCIDevice->GetSynchronizer()->SetLogLevel(gCCIDemoCmdLine.log);
+    pCCIDevice->GetSynchronizer()->SetTraceLevel(gCCIDemoCmdLine.trace);
+#endif // ENABLE_DEBUG
 
-//     ICCIWorkspace *pDSMWorkspace    = pCCIDevice->AllocateWorkspace(BWA_DSM_SIZE);
-//     ICCIWorkspace *pInputWorkspace  = pCCIDevice->AllocateWorkspace(BWA_INPUT_BUFFER_SIZE * BWA_NUM_BATCHES);
-//     ICCIWorkspace *pOutputWorkspace = pCCIDevice->AllocateWorkspace(BWA_OUTPUT_BUFFER_SIZE * BWA_NUM_BATCHES);
+    ICCIWorkspace *pDSMWorkspace    = pCCIDevice->AllocateWorkspace(BWA_DSM_SIZE);
+    ICCIWorkspace *pInputWorkspace  = pCCIDevice->AllocateWorkspace(BWA_INPUT_BUFFER_SIZE * BWA_NUM_BATCHES);
+    ICCIWorkspace *pOutputWorkspace = pCCIDevice->AllocateWorkspace(BWA_OUTPUT_BUFFER_SIZE * BWA_NUM_BATCHES);
 
-//     volatile btVirtAddr pInputUsrVirt  = pInputWorkspace->GetUserVirtualAddress(); 
-//     volatile btVirtAddr pOutputUsrVirt = pOutputWorkspace->GetUserVirtualAddress();
-//     volatile btVirtAddr pDSMUsrVirt    = pDSMWorkspace->GetUserVirtualAddress();
+    volatile btVirtAddr pInputUsrVirt  = pInputWorkspace->GetUserVirtualAddress(); 
+    volatile btVirtAddr pOutputUsrVirt = pOutputWorkspace->GetUserVirtualAddress();
+    volatile btVirtAddr pDSMUsrVirt    = pDSMWorkspace->GetUserVirtualAddress();
 
 //     // [QA] Initialize the batch list and the free list
 //     batchListDummyHead = new batch;
@@ -292,67 +292,66 @@ int main(int argc, char *argv[])
 // 	freeListTail->next = NULL;
 //     }
 
-//     memset((void *)pOutputUsrVirt, 0, pOutputWorkspace->GetSizeInBytes());
-//     memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
+    memset((void *)pOutputUsrVirt, 0, pOutputWorkspace->GetSizeInBytes());
+    memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
 
-//     bt32bitCSR i;
-//     bt32bitCSR csr;
+    bt32bitCSR i;
+    bt32bitCSR csr;
 
-//     // Assert CAFU Reset
-//     csr = 0;
-//     pCCIDevice->GetCSR(CSR_CIPUCTL, &csr);
-//     csr |= 0x01000000;
-//     pCCIDevice->SetCSR(CSR_CIPUCTL, csr);
+    // Assert CAFU Reset
+    csr = 0;
+    pCCIDevice->GetCSR(CSR_CIPUCTL, &csr);
+    csr |= 0x01000000;
+    pCCIDevice->SetCSR(CSR_CIPUCTL, csr);
 
-//     // De-assert CAFU Reset
-//     csr = 0;
-//     pCCIDevice->GetCSR(CSR_CIPUCTL, &csr);
-//     csr &= ~0x01000000;
-//     pCCIDevice->SetCSR(CSR_CIPUCTL, csr);
+    // De-assert CAFU Reset
+    csr = 0;
+    pCCIDevice->GetCSR(CSR_CIPUCTL, &csr);
+    csr &= ~0x01000000;
+    pCCIDevice->SetCSR(CSR_CIPUCTL, csr);
 
-//     // Set DSM base, high then low
-//     pCCIDevice->SetCSR(CSR_AFU_DSM_BASEH, pDSMWorkspace->GetPhysicalAddress() >> 32);
-//     pCCIDevice->SetCSR(CSR_AFU_DSM_BASEL, pDSMWorkspace->GetPhysicalAddress() & 0xffffffff);
+    // Set DSM base, high then low
+    pCCIDevice->SetCSR(CSR_AFU_DSM_BASEH, pDSMWorkspace->GetPhysicalAddress() >> 32);
+    pCCIDevice->SetCSR(CSR_AFU_DSM_BASEL, pDSMWorkspace->GetPhysicalAddress() & 0xffffffff);
 
-//     // Poll for AFU ID
-//     do
-//     {
-//         csr = *(volatile btUnsigned32bitInt *)pDSMUsrVirt;
-//     } while( 0 == csr );
+    // Poll for AFU ID
+    do
+    {
+        csr = *(volatile btUnsigned32bitInt *)pDSMUsrVirt;
+    } while( 0 == csr );
 
-//     // Print the AFU ID
-//     cout << "AFU ID=";
-//     for ( i = 0 ; i < 4 ; ++i ) {
-//         cout << std::setw(8) << std::hex << std::setfill('0')
-//             << *(btUnsigned32bitInt *)(pDSMUsrVirt + (3 - i) * sizeof(btUnsigned32bitInt));
-//     }
+    // Print the AFU ID
+    cout << "AFU ID=";
+    for ( i = 0 ; i < 4 ; ++i ) {
+        cout << std::setw(8) << std::hex << std::setfill('0')
+            << *(btUnsigned32bitInt *)(pDSMUsrVirt + (3 - i) * sizeof(btUnsigned32bitInt));
+    }
 
-//     // Assert Device Reset
-//     pCCIDevice->SetCSR(CSR_CTL, 0);
+    // Assert Device Reset
+    pCCIDevice->SetCSR(CSR_CTL, 0);
 
-//     // Clear the DSM
-//     memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
+    // Clear the DSM
+    memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
 
-//     // De-assert Device Reset
-//     pCCIDevice->SetCSR(CSR_CTL, 1);
+    // De-assert Device Reset
+    pCCIDevice->SetCSR(CSR_CTL, 1);
 
-//     // Set input workspace address
-//     pCCIDevice->SetCSR(CSR_SRC_ADDR, CACHELINE_ALIGNED_ADDR(pInputWorkspace->GetPhysicalAddress()));
+    // Set input workspace address
+    pCCIDevice->SetCSR(CSR_SRC_ADDR, CACHELINE_ALIGNED_ADDR(pInputWorkspace->GetPhysicalAddress()));
 
-//     // Set output workspace address
-//     pCCIDevice->SetCSR(CSR_DST_ADDR,  CACHELINE_ALIGNED_ADDR(pOutputWorkspace->GetPhysicalAddress()));
+    // Set output workspace address
+    pCCIDevice->SetCSR(CSR_DST_ADDR, CACHELINE_ALIGNED_ADDR(pOutputWorkspace->GetPhysicalAddress()));
 
-//     // Set the test mode
-//     pCCIDevice->SetCSR(CSR_CFG,       0);
+    // Set the test mode
+    pCCIDevice->SetCSR(CSR_CFG,       0);
 
-//     volatile bt32bitCSR *StatusAddr = (volatile bt32bitCSR *)
-//                                     (pDSMUsrVirt  + DSM_STATUS_TEST_COMPLETE);
-//     // Start the test
-//     pCCIDevice->SetCSR(CSR_CTL,      0x3);
+    volatile bt32bitCSR *StatusAddr = (volatile bt32bitCSR *)
+                                    (pDSMUsrVirt  + DSM_STATUS_TEST_COMPLETE);
+    // Start the test
+    pCCIDevice->SetCSR(CSR_CTL,      0x3);
 
-
-    int8_t pInputUsrVirt[BWA_INPUT_BUFFER_SIZE * BWA_NUM_BATCHES]; 
-    int8_t pOutputUsrVirt[BWA_OUTPUT_BUFFER_SIZE * BWA_NUM_BATCHES];
+    // int8_t pInputUsrVirt[BWA_INPUT_BUFFER_SIZE * BWA_NUM_BATCHES]; 
+    // int8_t pOutputUsrVirt[BWA_OUTPUT_BUFFER_SIZE * BWA_NUM_BATCHES];
 
     // [QA] Initialize the batch list and the free list
     batchListDummyHead = new batch;
@@ -364,22 +363,24 @@ int main(int argc, char *argv[])
     freeListDummyHead->next = NULL;
     freeListDummyHead->prev = NULL;
     freeListTail = freeListDummyHead;
-    for (int k=0; k<BWA_NUM_BATCHES; k++) {
+    for (int k = 0; k < BWA_NUM_BATCHES; k++) {
         freeListTail->next = new batch;
-	freeListTail->next->prev = freeListTail;
+        freeListTail->next->prev = freeListTail;
         freeListTail = freeListTail->next;
         freeListTail->inputValid = 0;
         freeListTail->outputValid = 0;
-	// comment for test, should use them
-        //freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
-        //freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
-	// just for testing, should be deleted
-        freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(int8_t);
-        freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(int8_t);
-	freeListTail->next = NULL;
-	//freeListTail->inputReady = PTHREAD_COND_INITIALIZER;
-	freeListTail->outputReady = PTHREAD_COND_INITIALIZER;
-	freeListTail->batchNodeLock = PTHREAD_MUTEX_INITIALIZER;
+        
+        // comment for test, should use them
+        freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
+        freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
+        // just for testing, should be deleted
+        // freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(int8_t);
+        // freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(int8_t);
+
+        freeListTail->next = NULL;
+        //freeListTail->inputReady = PTHREAD_COND_INITIALIZER;
+        freeListTail->outputReady = PTHREAD_COND_INITIALIZER;
+        freeListTail->batchNodeLock = PTHREAD_MUTEX_INITIALIZER;
     }
 
     pthread_t exe_thread;
@@ -391,15 +392,29 @@ int main(int argc, char *argv[])
 
     batch* p = NULL;
     while (batchListDummyHead) {
-	p = batchListDummyHead;
-	batchListDummyHead = batchListDummyHead->next;
-	delete p;
+        p = batchListDummyHead;
+        batchListDummyHead = batchListDummyHead->next;
+        delete p;
     }
     while (freeListDummyHead) {
-	p = freeListDummyHead;
-	freeListDummyHead = freeListDummyHead->next;
-	delete p;
+        p = freeListDummyHead;
+        freeListDummyHead = freeListDummyHead->next;
+        delete p;
     }
+
+    // Stop the device
+    pCCIDevice->SetCSR(CSR_CTL,      0x7);
+
+    // Release the Workspaces
+    pCCIDevice->FreeWorkspace(pInputWorkspace);
+    pCCIDevice->FreeWorkspace(pOutputWorkspace);
+    pCCIDevice->FreeWorkspace(pDSMWorkspace);
+
+    // Release the CCI Device instance.
+    pCCIDevFactory->DestroyCCIDevice(pCCIDevice);
+
+    // Release the CCI Device Factory instance.
+    delete pCCIDevFactory;
 
     return 0;
 }
