@@ -25,7 +25,7 @@
 #define CSR_AFU_DSM_BASEH          0x1a04
 #define CSR_SRC_ADDR               0x1a20
 #define CSR_DST_ADDR               0x1a24
-#define CSR_NUM_LINES              0x1a28
+#define CSR_REQ_PEARRAY            0x1a28
 #define CSR_CTL                    0x1a2c
 #define CSR_CFG                    0x1a34
 

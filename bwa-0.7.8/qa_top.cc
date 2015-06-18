@@ -115,6 +115,9 @@ batch* batchListDummyHead = NULL;
 batch* batchListTail = NULL;
 batch* freeListDummyHead = NULL;
 batch* freeListTail = NULL;
+batch  bat[BWA_NUM_BATCHES];
+
+int request_pearray[BWA_NUM_BATCHES];
 
 volatile bt32bitCSR *StatusAddr;
 
@@ -191,11 +194,29 @@ void releaseBatchSpace(batch* p_batch) {
     rc = pthread_mutex_unlock(p_mutex);
 }
 
+void show_req_vector()
+{
+    cout << "    Request Vector = ";
+    for (int k = 0; k < BWA_NUM_BATCHES; k++) 
+        cout << request_pearray[k];
+    cout << endl;
+}
+
+void show_status(bt32bitCSR status)
+{
+    cout << "Current Status = ";
+    for (int k = 0; k < BWA_NUM_BATCHES; k++)
+        cout << ((status >> k) & 1);
+    cout << endl;
+}
+
 void*
 execution_fpga(void* data)
 {
     // char* exe_message = (char*) data;
     //printf ("Start running the execution_fpga thread with message: %s\n", exe_message);
+
+    cout << "Start running the execution thread." << endl;
 
     ICCIDevice *pCCIDevice = (ICCIDevice*) data;
 
@@ -203,7 +224,8 @@ execution_fpga(void* data)
     batch* cur_batch = NULL;
     batch* next_batch = NULL;
 
-    int num_batches = 0;
+    for (int k = 0; k < BWA_NUM_BATCHES; k++)
+        request_pearray[k] = 0;
 
     while (1) {
         // 1st: wait for a valid input
@@ -230,46 +252,84 @@ execution_fpga(void* data)
         }
         rc = pthread_mutex_unlock(&batchListLock);
 
-        cout << "Batch " << std::hex << cur_batch->inputAddr << " dispatched to FPGA" << endl;
-        cout << *(btUnsigned32bitInt *)cur_batch->inputAddr << endl;
+        cout << "[" << cur_batch->idx << "] ";
+        cout << "Batch (" << *(btUnsigned32bitInt *)cur_batch->inputAddr << ") dispatched to FPGA" << endl;
 
-        int request_pearray = 1 << cur_batch->idx;
+        request_pearray[cur_batch->idx] = 1;
 
-        if      (*StatusAddr & 0x1 == 0) request_pearray = 1;
-        else if (*StatusAddr & 0x2 == 0) request_pearray = 2;
-        else if (*StatusAddr & 0x4 == 0) request_pearray = 4;
-        else if (*StatusAddr & 0x8 == 0) request_pearray = 8;
+        int request_vector = 0;
+        for (int k = 0; k < BWA_NUM_BATCHES; k++)
+            request_vector |= ( request_pearray[k] << k );
+        show_req_vector();
 
         // pCCIDevice->SetCSR(CSR_NUM_LINES, 1);
-        pCCIDevice->SetCSR(CSR_NUM_LINES, request_pearray);
-
-        // after remove this node, do the extension
-        // extension((int8_t*)cur_batch->inputAddr, (int8_t*)cur_batch->outputAddr);
-
-        // validate output and send conditional signal
-        // rc = pthread_mutex_lock(&cur_batch->batchNodeLock);
-        // cur_batch->outputValid = 1;
-        // pthread_cond_signal(&cur_batch->outputReady);
-        // rc = pthread_mutex_unlock(&cur_batch->batchNodeLock);
+        pCCIDevice->SetCSR(CSR_REQ_PEARRAY, request_vector);
     }
+    
     return NULL;
 }
 
 void*
 collection_fpga(void* data)
 {
-    bt32bitCSR cur_status = 0;
+    cout << "Start running the collection thread." << endl;
+
+    ICCIDevice *pCCIDevice = (ICCIDevice*) data;
+
+    bt32bitCSR pre_status = 0;
+    int pre_pearray_busy[BWA_NUM_BATCHES];
+    int cur_pearray_busy[BWA_NUM_BATCHES];
+    bool request_updtd = true;
+    int rc;
+
+    for (int k = 0; k < BWA_NUM_BATCHES; k++) {
+        pre_pearray_busy[k] = 0;
+        cur_pearray_busy[k] = 0;
+    }
 
     while (true) {
-        while ( cur_status == *StatusAddr ) {
+        while ( pre_status == *StatusAddr ) {
             usleep(100);
         }
 
-        cout << "FPGA done. cur_status = " << *StatusAddr << endl;
+        pre_status = *StatusAddr;
 
+        cout << endl << "FPGA STATUS CHANGED ";
+        show_status(pre_status);
 
+        for (int k = 0; k < BWA_NUM_BATCHES; k++) {
+            cur_pearray_busy[k] = (pre_status >> k) & 1;
+            // cout << cur_pearray_busy[k];
 
-        cur_status = *StatusAddr;
+            if (pre_pearray_busy[k] == 0 && cur_pearray_busy[k] == 1) {
+                request_pearray[k] = 0;     // no race condition with the exe thread
+                request_updtd = false;
+
+                cout << "[" << k << "] ";
+                cout << "PEarray starts to work. Updating request vector." << endl;
+            } else if (pre_pearray_busy[k] == 1 && cur_pearray_busy[k] == 0) {
+                rc = pthread_mutex_lock(&bat[k].batchNodeLock);
+                bat[k].outputValid = 1;
+                pthread_cond_signal(&bat[k].outputReady);
+                rc = pthread_mutex_unlock(&bat[k].batchNodeLock);
+
+                cout << "[" << k << "] ";
+                cout << "PEarray finished processing. Releasing current batch." << endl;
+            }
+
+            pre_pearray_busy[k] = cur_pearray_busy[k];
+        }
+
+        if (!request_updtd) {
+            request_updtd = true;
+            int request_vector = 0;
+            for (int k = 0; k < BWA_NUM_BATCHES; k++)
+                request_vector |= ( request_pearray[k] << k );
+            show_req_vector();
+
+            // update the request vector
+            pCCIDevice->SetCSR(CSR_REQ_PEARRAY, request_vector);
+        }
     }
 
     return NULL;
@@ -308,27 +368,6 @@ int main(int argc, char *argv[])
     volatile btVirtAddr pInputUsrVirt  = pInputWorkspace->GetUserVirtualAddress(); 
     volatile btVirtAddr pOutputUsrVirt = pOutputWorkspace->GetUserVirtualAddress();
     volatile btVirtAddr pDSMUsrVirt    = pDSMWorkspace->GetUserVirtualAddress();
-
-//     // [QA] Initialize the batch list and the free list
-//     batchListDummyHead = new batch;
-//     batchListDummyHead->next = NULL;
-//     batchListDummyHead->prev = NULL;
-//     batchListTail = batchListDummyHead;
-
-//     freeListDummyHead = new batch;
-//     freeListDummyHead->next = NULL;
-//     freeListDummyHead->prev = NULL;
-//     freeListTail = freeListDummyHead;
-//     for (int k=0; k<BWA_NUM_BATCHES; k++) {
-//         freeListTail->next = new batch;
-// 	freeListTail->next->prev = freeListTail;
-//         freeListTail = freeListTail->next;
-//         freeListTail->inputValid = 0;
-//         freeListTail->outputValid = 0;
-//         freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
-//         freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
-// 	freeListTail->next = NULL;
-//     }
 
     memset((void *)pOutputUsrVirt, 0, pOutputWorkspace->GetSizeInBytes());
     memset((void *)pDSMUsrVirt, 0, pDSMWorkspace->GetSizeInBytes());
@@ -382,18 +421,15 @@ int main(int argc, char *argv[])
     pCCIDevice->SetCSR(CSR_DST_ADDR, CACHELINE_ALIGNED_ADDR(pOutputWorkspace->GetPhysicalAddress()));
 
     // Set the test mode
-    pCCIDevice->SetCSR(CSR_CFG,       0);
+    pCCIDevice->SetCSR(CSR_CFG, 0);
 
-    volatile bt32bitCSR *StatusAddr = (volatile bt32bitCSR *)
-                                    (pDSMUsrVirt  + DSM_STATUS_PEARRAY);
+    StatusAddr = (volatile bt32bitCSR *)(pDSMUsrVirt  + DSM_STATUS_PEARRAY);
 
-    pCCIDevice->SetCSR(CSR_NUM_LINES, 0);
+    pCCIDevice->SetCSR(CSR_REQ_PEARRAY, 0);
 
     // Start the test
-    pCCIDevice->SetCSR(CSR_CTL,      0x3);
+    pCCIDevice->SetCSR(CSR_CTL, 0x3);
 
-    // int8_t pInputUsrVirt[BWA_INPUT_BUFFER_SIZE * BWA_NUM_BATCHES]; 
-    // int8_t pOutputUsrVirt[BWA_OUTPUT_BUFFER_SIZE * BWA_NUM_BATCHES];
 
     // [QA] Initialize the batch list and the free list
     batchListDummyHead = new batch;
@@ -405,20 +441,17 @@ int main(int argc, char *argv[])
     freeListDummyHead->next = NULL;
     freeListDummyHead->prev = NULL;
     freeListTail = freeListDummyHead;
+
     for (int k = 0; k < BWA_NUM_BATCHES; k++) {
-        freeListTail->next = new batch;
+        freeListTail->next = &bat[k];
         freeListTail->next->prev = freeListTail;
         freeListTail = freeListTail->next;
         freeListTail->inputValid = 0;
         freeListTail->outputValid = 0;
         freeListTail->idx = k;
         
-        // comment for test, should use them
         freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k;  // byte addressing
         freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k;
-        // just for testing, should be deleted
-        // freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(int8_t);
-        // freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(int8_t);
 
         freeListTail->next = NULL;
         //freeListTail->inputReady = PTHREAD_COND_INITIALIZER;
@@ -426,10 +459,12 @@ int main(int argc, char *argv[])
         freeListTail->batchNodeLock = PTHREAD_MUTEX_INITIALIZER;
     }
 
+    cout << "done" << endl;
+
     pthread_t exe_thread;
     pthread_t col_thread;
     pthread_create(&exe_thread, NULL, execution_fpga,  (void*) pCCIDevice);
-    pthread_create(&col_thread, NULL, collection_fpga, (void*) pDSMWorkspace);
+    pthread_create(&col_thread, NULL, collection_fpga, (void*) pCCIDevice);
 
     /* skip the first command */
     bwa_main(argc - 1, argv + 1);
