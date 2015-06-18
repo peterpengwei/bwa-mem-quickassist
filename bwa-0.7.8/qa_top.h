@@ -31,7 +31,7 @@
 
 #define CSR_OFFSET(x)              ((x) / sizeof(bt32bitCSR))
 
-#define DSM_STATUS_TEST_COMPLETE   0x40
+#define DSM_STATUS_PEARRAY		   0x40
 #define DSM_STATUS_TEST_ERROR      0x44
 #define DSM_STATUS_MODE_ERROR_0    0x60
 

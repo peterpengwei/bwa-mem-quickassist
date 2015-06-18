@@ -1,6 +1,7 @@
 #include <pthread.h>
 
 typedef struct batch {
+	int idx;
     void* inputAddr;
     void* outputAddr;
     int inputValid;

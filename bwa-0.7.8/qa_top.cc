@@ -116,6 +116,8 @@ batch* batchListTail = NULL;
 batch* freeListDummyHead = NULL;
 batch* freeListTail = NULL;
 
+volatile bt32bitCSR *StatusAddr;
+
 // end global
 
 batch* 
@@ -192,12 +194,16 @@ void releaseBatchSpace(batch* p_batch) {
 void*
 execution_fpga(void* data)
 {
-    char* exe_message = (char*) data;
+    // char* exe_message = (char*) data;
     //printf ("Start running the execution_fpga thread with message: %s\n", exe_message);
+
+    ICCIDevice *pCCIDevice = (ICCIDevice*) data;
 
     int rc;
     batch* cur_batch = NULL;
     batch* next_batch = NULL;
+
+    int num_batches = 0;
 
     while (1) {
         // 1st: wait for a valid input
@@ -224,15 +230,48 @@ execution_fpga(void* data)
         }
         rc = pthread_mutex_unlock(&batchListLock);
 
+        cout << "Batch " << std::hex << cur_batch->inputAddr << " dispatched to FPGA" << endl;
+        cout << *(btUnsigned32bitInt *)cur_batch->inputAddr << endl;
+
+        int request_pearray = 1 << cur_batch->idx;
+
+        if      (*StatusAddr & 0x1 == 0) request_pearray = 1;
+        else if (*StatusAddr & 0x2 == 0) request_pearray = 2;
+        else if (*StatusAddr & 0x4 == 0) request_pearray = 4;
+        else if (*StatusAddr & 0x8 == 0) request_pearray = 8;
+
+        // pCCIDevice->SetCSR(CSR_NUM_LINES, 1);
+        pCCIDevice->SetCSR(CSR_NUM_LINES, request_pearray);
+
         // after remove this node, do the extension
-        extension((int8_t*)cur_batch->inputAddr, (int8_t*)cur_batch->outputAddr);
+        // extension((int8_t*)cur_batch->inputAddr, (int8_t*)cur_batch->outputAddr);
 
         // validate output and send conditional signal
-        rc = pthread_mutex_lock(&cur_batch->batchNodeLock);
-        cur_batch->outputValid = 1;
-        pthread_cond_signal(&cur_batch->outputReady);
-        rc = pthread_mutex_unlock(&cur_batch->batchNodeLock);
+        // rc = pthread_mutex_lock(&cur_batch->batchNodeLock);
+        // cur_batch->outputValid = 1;
+        // pthread_cond_signal(&cur_batch->outputReady);
+        // rc = pthread_mutex_unlock(&cur_batch->batchNodeLock);
     }
+    return NULL;
+}
+
+void*
+collection_fpga(void* data)
+{
+    bt32bitCSR cur_status = 0;
+
+    while (true) {
+        while ( cur_status == *StatusAddr ) {
+            usleep(100);
+        }
+
+        cout << "FPGA done. cur_status = " << *StatusAddr << endl;
+
+
+
+        cur_status = *StatusAddr;
+    }
+
     return NULL;
 }
 
@@ -250,7 +289,6 @@ int main(int argc, char *argv[])
     } else if (verifycmds(&gCCIDemoCmdLine)) {
         return 3;
     }
-    cout << "AAL command parsed." << endl;
 
     const CCIDeviceImplementation CCIDevImpl = gCCIDemoCmdLine.target;
 
@@ -326,6 +364,7 @@ int main(int argc, char *argv[])
         cout << std::setw(8) << std::hex << std::setfill('0')
             << *(btUnsigned32bitInt *)(pDSMUsrVirt + (3 - i) * sizeof(btUnsigned32bitInt));
     }
+    cout << endl;
 
     // Assert Device Reset
     pCCIDevice->SetCSR(CSR_CTL, 0);
@@ -346,7 +385,10 @@ int main(int argc, char *argv[])
     pCCIDevice->SetCSR(CSR_CFG,       0);
 
     volatile bt32bitCSR *StatusAddr = (volatile bt32bitCSR *)
-                                    (pDSMUsrVirt  + DSM_STATUS_TEST_COMPLETE);
+                                    (pDSMUsrVirt  + DSM_STATUS_PEARRAY);
+
+    pCCIDevice->SetCSR(CSR_NUM_LINES, 0);
+
     // Start the test
     pCCIDevice->SetCSR(CSR_CTL,      0x3);
 
@@ -369,10 +411,11 @@ int main(int argc, char *argv[])
         freeListTail = freeListTail->next;
         freeListTail->inputValid = 0;
         freeListTail->outputValid = 0;
+        freeListTail->idx = k;
         
         // comment for test, should use them
-        freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
-        freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(btUnsigned32bitInt);
+        freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k;  // byte addressing
+        freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k;
         // just for testing, should be deleted
         // freeListTail->inputAddr = pInputUsrVirt + BWA_INPUT_BUFFER_SIZE * k / sizeof(int8_t);
         // freeListTail->outputAddr = pOutputUsrVirt + BWA_OUTPUT_BUFFER_SIZE * k / sizeof(int8_t);
@@ -384,8 +427,9 @@ int main(int argc, char *argv[])
     }
 
     pthread_t exe_thread;
-    const char* exe_message = "Execution Thread on FPGA";
-    pthread_create(&exe_thread, NULL, execution_fpga, (void*) exe_message);
+    pthread_t col_thread;
+    pthread_create(&exe_thread, NULL, execution_fpga,  (void*) pCCIDevice);
+    pthread_create(&col_thread, NULL, collection_fpga, (void*) pDSMWorkspace);
 
     /* skip the first command */
     bwa_main(argc - 1, argv + 1);
