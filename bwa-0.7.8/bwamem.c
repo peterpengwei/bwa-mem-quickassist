@@ -1242,6 +1242,7 @@ void mem_reg2sam_se(const mem_opt_t *opt, const bntseq_t *bns, const uint8_t *pa
 	s->sam = str.s;
 }
 
+/*
 void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, const int batch_idx, const int8_t* output_space, const mem_opt_t* opt) {
 	int i;
 	int16_t* p_res = (int16_t*)output_space;
@@ -1266,6 +1267,32 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, 
 			if (bwa_verbose >= 4) ref_extension(ref_reg, param_batch[i].reg, &param_batch[i], opt);
 		}
 	}
+}*/
+
+void retrieve_output_memory(const ext_param_t* param_batch, const int8_t* output_space, const int taskNum, int start) {
+        int i;
+        int16_t* p_res = (int16_t*)output_space;
+	int32_t cur_idx = -1;
+        for (i=0; i<taskNum; i++) {
+		cur_idx = *((int32_t*)(p_res));
+		cur_idx -= start;
+		p_res += 2;
+                param_batch[cur_idx].reg->qb = *p_res;
+                p_res++;
+                param_batch[cur_idx].reg->qe = *p_res + param_batch[cur_idx].qe_offset;
+                p_res++;
+                param_batch[cur_idx].reg->rb = *p_res + param_batch[cur_idx].rbeg_offset;
+                p_res++;
+                param_batch[cur_idx].reg->re = *p_res + param_batch[cur_idx].re_offset;
+                p_res++;
+                param_batch[cur_idx].reg->score = *p_res;
+                p_res++;
+                param_batch[cur_idx].reg->truesc = *p_res;
+                p_res++;
+                param_batch[cur_idx].reg->w = *p_res;
+                p_res++;
+                p_res++;
+        }
 }
 
 void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const int batch_idx, int8_t* input_space, const mem_opt_t* opt) {
@@ -1961,7 +1988,8 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 						pthread_mutex_lock(&reservedBatch->batchNodeLock);
 						while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
 						pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-						retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->outputAddr, opt);
+						retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start);
+						//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->outputAddr, opt);
 						// after that, clean the space
 						releaseBatchSpace(reservedBatch);
 						filled_space = 32;
@@ -2029,7 +2057,8 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 				pthread_mutex_lock(&reservedBatch->batchNodeLock);
 				while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
 				pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-				retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->outputAddr, opt);
+				retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start);
+				//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->outputAddr, opt);
 				// after that, clean the space
 				releaseBatchSpace(reservedBatch);
 				filled_space = 32;
