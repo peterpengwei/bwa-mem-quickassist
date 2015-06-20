@@ -1270,14 +1270,14 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, 
 }*/
 
 void retrieve_output_memory(const ext_param_t* param_batch, const int8_t* output_space, const int taskNum, int start) {
-	printf("\n[retrieve_output_memory] #task = %d\n", taskNum);
+	printf("\n[retrieve_output_memory] #task = %d, start = %d\n", taskNum, start);
         int i;
         int16_t* p_res = (int16_t*)output_space;
 	int32_t cur_idx = -1;
         for (i=0; i<taskNum; i++) {
 		cur_idx = *((int32_t*)(p_res));
 		cur_idx -= start;
-		printf ("[retrieve_output_memory] the index of the %d-th task is: %d", i, cur_idx);
+		printf ("[retrieve_output_memory] the index of the %d-th task is: %d\n", i, cur_idx);
 		assert (param_batch[cur_idx].valid);
 		p_res += 2;
                 param_batch[cur_idx].reg->qb = *p_res;
@@ -1296,6 +1296,7 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int8_t* output
                 p_res++;
                 p_res++;
         }
+		printf ("\n[retrieve_output_memory] finish retrieving\n");
 }
 
 /*
@@ -1380,6 +1381,7 @@ void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const
 			*((int16_t*)(&p_param[24])) = rightMaxIns;
 			*((int16_t*)(&p_param[26])) = rightMaxDel;
 			*((int32_t*)(&p_param[28])) = param_batch[i].idx;
+			printf("\n[fill_input_memory] the %d-th param has index: %d\n", i, param_batch[i].idx);
 
 			int bp_num = 0;
 			uint32_t* bp_val = (uint32_t*)p_string;
@@ -2331,11 +2333,6 @@ static void worker1(void *data, int i, int tid)
 static void worker1_batched(void *data, int start, int batch_size, int tid)
 {
 	worker_t *w = (worker_t*)data;
-	//int i = -1;
-	//for (i=start; i<start+batch_size; i++) {
-	//	if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);
-	//	w->regs[i] = mem_align1_core(w->opt, w->bwt, w->bns, w->pac, w->seqs[i].l_seq, w->seqs[i].seq);
-	//}
 	mem_alnreg_v* ret = mem_align1_core_batched(w->opt, w->bwt, w->bns, w->pac, w->seqs, start, batch_size);
 	int i = -1;
 	for (i=start; i<start+batch_size; i++) {
