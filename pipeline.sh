@@ -52,6 +52,7 @@ WRAPPER() {
 #	eval "strace -T -ttt -o $OFILE.strace.$1 -f -ff $2"
 	# Run the command
 	eval "$2"
+	echo "$2"
 	R=$?
 	# Print the end time
 	D=`date`

@@ -1269,30 +1269,51 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, 
 	}
 }*/
 
-void retrieve_output_memory(const ext_param_t* param_batch, const int8_t* output_space, const int taskNum, int start) {
-        int i;
-        int16_t* p_res = (int16_t*)output_space;
+void retrieve_output_memory(const ext_param_t* param_batch, const int16_t* output_space, const int taskNum, int start) {
+
+	int i, j;
+
 	int32_t cur_idx = -1;
-        for (i=0; i<taskNum; i++) {
-		cur_idx = *((int32_t*)(p_res));
+	int32_t  valid_cache_line;
+	int16_t* p_res;
+	int16_t* p_base;
+
+	/* 5 int per task / 16 int per cache line */
+	valid_cache_line = taskNum * 5 / 16 + 1;
+	p_res = (int16_t*)malloc( sizeof(int16_t) * valid_cache_line * 32 );
+	p_base = (int16_t*) output_space;
+
+	for (j = 0; j < valid_cache_line; ++j, p_base += 32 ) {
+		for (i = 0; i < 32; i++) {
+			p_res[j * 32 + i] = *(int16_t *)(p_base + (31 - i));
+		}
+	}
+
+	// int16_t* p_res = (int16_t*)output_space;
+	for (i = 0; i < taskNum; i++) {
+		// cur_idx = *((int32_t*)(p_res));
+		cur_idx = (int32_t)(p_res[i * 10 + 1]);
 		cur_idx -= start;
-		p_res += 2;
-                param_batch[cur_idx].reg->qb = *p_res;
-                p_res++;
-                param_batch[cur_idx].reg->qe = *p_res + param_batch[cur_idx].qe_offset;
-                p_res++;
-                param_batch[cur_idx].reg->rb = *p_res + param_batch[cur_idx].rbeg_offset;
-                p_res++;
-                param_batch[cur_idx].reg->re = *p_res + param_batch[cur_idx].re_offset;
-                p_res++;
-                param_batch[cur_idx].reg->score = *p_res;
-                p_res++;
-                param_batch[cur_idx].reg->truesc = *p_res;
-                p_res++;
-                param_batch[cur_idx].reg->w = *p_res;
-                p_res++;
-                p_res++;
-        }
+		// p_res += 3;
+		param_batch[cur_idx].reg->qb = p_res[i * 10 + 3];
+		// p_res--;
+		param_batch[cur_idx].reg->qe = p_res[i * 10 + 2] + param_batch[cur_idx].qe_offset;
+		// p_res += 3;
+		param_batch[cur_idx].reg->rb = p_res[i * 10 + 5] + param_batch[cur_idx].rbeg_offset;
+		// p_res--;
+		param_batch[cur_idx].reg->re = p_res[i * 10 + 4] + param_batch[cur_idx].re_offset;
+		// p_res += 3;
+		param_batch[cur_idx].reg->score = p_res[i * 10 + 7];
+		// p_res--;
+		param_batch[cur_idx].reg->truesc = p_res[i * 10 + 6];
+		// p_res += 3;
+		param_batch[cur_idx].reg->w = p_res[i * 10 + 9];
+		// p_res++;
+	}
+
+	free(p_res);
+
+	printf("done\n");
 }
 
 void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const int batch_idx, int8_t* input_space, const mem_opt_t* opt) {
@@ -1988,7 +2009,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 						pthread_mutex_lock(&reservedBatch->batchNodeLock);
 						while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
 						pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-						retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start);
+						retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
 						//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->outputAddr, opt);
 						// after that, clean the space
 						releaseBatchSpace(reservedBatch);
@@ -2057,7 +2078,9 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 				pthread_mutex_lock(&reservedBatch->batchNodeLock);
 				while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
 				pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-				retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start);
+
+				// FIXME
+				retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
 				//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->outputAddr, opt);
 				// after that, clean the space
 				releaseBatchSpace(reservedBatch);

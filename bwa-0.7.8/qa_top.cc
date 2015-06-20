@@ -265,7 +265,7 @@ execution_fpga(void* data)
         // pCCIDevice->SetCSR(CSR_NUM_LINES, 1);
         pCCIDevice->SetCSR(CSR_REQ_PEARRAY, request_vector);
     }
-    
+
     return NULL;
 }
 
@@ -458,8 +458,6 @@ int main(int argc, char *argv[])
         freeListTail->outputReady = PTHREAD_COND_INITIALIZER;
         freeListTail->batchNodeLock = PTHREAD_MUTEX_INITIALIZER;
     }
-
-    cout << "done" << endl;
 
     pthread_t exe_thread;
     pthread_t col_thread;
