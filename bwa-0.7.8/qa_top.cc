@@ -288,6 +288,7 @@ collection_fpga(void* data)
     }
 
     while (true) {
+	cout << "[collection_fpga] start of the infinite while loop" << endl;
         while ( pre_status == *StatusAddr ) {
             usleep(100);
         }
@@ -314,7 +315,7 @@ collection_fpga(void* data)
                 rc = pthread_mutex_unlock(&bat[k].batchNodeLock);
 
                 cout << "[" << k << "] ";
-                cout << "PEarray finished processing. Releasing current batch." << endl;
+                cout << "PEarray finished processing. Releasing current batch." << "with input address = " << bat[k].inputAddr << ", and output address =" << bat[k].outputAddr << endl;
             }
 
             pre_pearray_busy[k] = cur_pearray_busy[k];

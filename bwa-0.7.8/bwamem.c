@@ -1269,7 +1269,38 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, 
 	}
 }*/
 
+void retrieve_output_memory(const ext_param_t* param_batch, const int8_t* output_space, const int taskNum, int start) {
+	printf("\n[retrieve_output_memory] #task = %d\n", taskNum);
+        int i;
+        int16_t* p_res = (int16_t*)output_space;
+	int32_t cur_idx = -1;
+        for (i=0; i<taskNum; i++) {
+		cur_idx = *((int32_t*)(p_res));
+		cur_idx -= start;
+		printf ("[retrieve_output_memory] the index of the %d-th task is: %d", i, cur_idx);
+		assert (param_batch[cur_idx].valid);
+		p_res += 2;
+                param_batch[cur_idx].reg->qb = *p_res;
+                p_res++;
+                param_batch[cur_idx].reg->qe = *p_res + param_batch[cur_idx].qe_offset;
+                p_res++;
+                param_batch[cur_idx].reg->rb = *p_res + param_batch[cur_idx].rbeg_offset;
+                p_res++;
+                param_batch[cur_idx].reg->re = *p_res + param_batch[cur_idx].re_offset;
+                p_res++;
+                param_batch[cur_idx].reg->score = *p_res;
+                p_res++;
+                param_batch[cur_idx].reg->truesc = *p_res;
+                p_res++;
+                param_batch[cur_idx].reg->w = *p_res;
+                p_res++;
+                p_res++;
+        }
+}
+
+/*
 void retrieve_output_memory(const ext_param_t* param_batch, const int16_t* output_space, const int taskNum, int start) {
+	printf("\n[retrieve_output_memory] #task = %d\n", taskNum);
 
 	int i, j;
 
@@ -1278,7 +1309,6 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int16_t* outpu
 	int16_t* p_res;
 	int16_t* p_base;
 
-	/* 5 int per task / 16 int per cache line */
 	valid_cache_line = taskNum * 5 / 16 + 1;
 	p_res = (int16_t*)malloc( sizeof(int16_t) * valid_cache_line * 32 );
 	p_base = (int16_t*) output_space;
@@ -1315,11 +1345,13 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int16_t* outpu
 
 	printf("done\n");
 }
+*/
 
 void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const int batch_idx, int8_t* input_space, const mem_opt_t* opt) {
 	int i,j;
 	int param_idx = 0;
 	int numOfReads = *((int*)(input_space+8));
+	printf("\n[fill_input_memory] #task = %d\n", numOfReads);
 	int8_t* p_param = input_space + 32; 
 	int8_t* p_string = input_space + 32 + 32 * numOfReads;
 	int32_t offset = 8 + numOfReads * 8;
@@ -2078,6 +2110,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 				pthread_mutex_lock(&reservedBatch->batchNodeLock);
 				while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
 				pthread_mutex_unlock(&reservedBatch->batchNodeLock);
+				printf("\n[debug] The output data of the batch is ready, with input address = %llx, and output address = %llx\n", reservedBatch->inputAddr, reservedBatch->outputAddr);
 
 				// FIXME
 				retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
