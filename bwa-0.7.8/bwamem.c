@@ -33,6 +33,8 @@
 #define INPUT_THRESHOLD 1024
 #define OUTPUT_SPACE_SIZE (1<<14)
 
+#define MIN_BATCH_SIZE 64
+
 #include "batch.h"
 
 batch* reqTBBSpace(); 
@@ -2006,9 +2008,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 				*/
 				if (filled_space + INPUT_THRESHOLD >= INPUT_SPACE_SIZE) {
 					if (bwa_verbose >= 4) printf("[debug] 2nd: batch processing on the fly\n");
-					// request TBB space for execution
-					batch* reservedBatch = reqTBBSpace();
-					if (reservedBatch == NULL) { // do it by CPU
+					if (*p_readNo < MIN_BATCH_SIZE) { // do it by CPU
 						int ori_idx;
 						for (ori_idx = start_read_idx-start; ori_idx <= batch_idx-start; ori_idx++)
 							if (param_batch[ori_idx].valid) original_extension(param_batch[ori_idx].reg, &param_batch[ori_idx], opt);
@@ -2017,43 +2017,56 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 						*p_readNo = 0;
 						start_read_idx = batch_idx;
 					}
-					else { // do it by FPGA
-						// fill input memory space
-						int8_t* input_space = (int8_t*)reservedBatch->inputAddr;
-						input_space[0] = opt->o_del;
-						input_space[1] = opt->e_del;
-						input_space[2] = opt->o_ins;
-						input_space[3] = opt->e_ins;
-						input_space[4] = opt->pen_clip5;
-						input_space[5] = opt->pen_clip3;
-						input_space[6] = opt->w;
-						*((int32_t*)(&input_space[8])) = *p_readNo;
-						fill_input_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->inputAddr, opt);
-
-						// let fpga do the task
-						// validate input and send conditional signal
-						pthread_mutex_lock(&batchListLock);
-						reservedBatch->inputValid = 1;
-						pthread_cond_signal(&inputReady);
-						//pthread_cond_signal(&reservedBatch->inputReady);
-						pthread_mutex_unlock(&batchListLock);
-
-						// retreive data from output memory space
-						// wait to get output ready signal
-						pthread_mutex_lock(&reservedBatch->batchNodeLock);
-						while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
-						pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-						retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
-						//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->outputAddr, opt);
-						// after that, clean the space
-						releaseBatchSpace(reservedBatch);
-						filled_space = 32;
-						*p_readNo = 0;
-						start_read_idx = batch_idx;
-					}
+					else {
+						// request TBB space for execution
+						batch* reservedBatch = reqTBBSpace();
+						if (reservedBatch == NULL) { // do it by CPU
+							int ori_idx;
+							for (ori_idx = start_read_idx-start; ori_idx <= batch_idx-start; ori_idx++)
+								if (param_batch[ori_idx].valid) original_extension(param_batch[ori_idx].reg, &param_batch[ori_idx], opt);
+							// after that, clean the space
+							filled_space = 32;
+							*p_readNo = 0;
+							start_read_idx = batch_idx;
 						}
-						//original_extension(param_batch[batch_idx-start].reg, &param_batch[batch_idx-start], opt);
+						else { // do it by FPGA
+							// fill input memory space
+							int8_t* input_space = (int8_t*)reservedBatch->inputAddr;
+							input_space[0] = opt->o_del;
+							input_space[1] = opt->e_del;
+							input_space[2] = opt->o_ins;
+							input_space[3] = opt->e_ins;
+							input_space[4] = opt->pen_clip5;
+							input_space[5] = opt->pen_clip3;
+							input_space[6] = opt->w;
+							*((int32_t*)(&input_space[8])) = *p_readNo;
+							fill_input_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->inputAddr, opt);
+
+							// let fpga do the task
+							// validate input and send conditional signal
+							pthread_mutex_lock(&batchListLock);
+							reservedBatch->inputValid = 1;
+							pthread_cond_signal(&inputReady);
+							//pthread_cond_signal(&reservedBatch->inputReady);
+							pthread_mutex_unlock(&batchListLock);
+
+							// retreive data from output memory space
+							// wait to get output ready signal
+							pthread_mutex_lock(&reservedBatch->batchNodeLock);
+							while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
+							pthread_mutex_unlock(&reservedBatch->batchNodeLock);
+							retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
+							//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->outputAddr, opt);
+							// after that, clean the space
+							releaseBatchSpace(reservedBatch);
+							filled_space = 32;
+							*p_readNo = 0;
+							start_read_idx = batch_idx;
+						}
 					}
+				}
+						//original_extension(param_batch[batch_idx-start].reg, &param_batch[batch_idx-start], opt);
+			}
 		}
 		// still has a split to process
 		if (bwa_verbose >= 4) printf("[debug] 3rd: batch processing for the tail\n");
@@ -2075,9 +2088,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 
 		if (filled_space > 32) {
 			assert (*p_readNo > 0);
-			// request TBB space for execution
-			batch* reservedBatch = reqTBBSpace();
-			if (reservedBatch == NULL) { // do it by CPU
+			if (*p_readNo < MIN_BATCH_SIZE) { // do it by CPU
 				int ori_idx;
 				for (ori_idx = start_read_idx-start; ori_idx <= batch_idx-1-start; ori_idx++)
 					if (param_batch[ori_idx].valid) original_extension(param_batch[ori_idx].reg, &param_batch[ori_idx], opt);
@@ -2086,42 +2097,55 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 				*p_readNo = 0;
 				start_read_idx = batch_idx;
 			}
-			else { // do it by FPGA
-				// fill input memory space
-				int8_t* input_space = (int8_t*)reservedBatch->inputAddr;
-				input_space[0] = opt->o_del;
-				input_space[1] = opt->e_del;
-				input_space[2] = opt->o_ins;
-				input_space[3] = opt->e_ins;
-				input_space[4] = opt->pen_clip5;
-				input_space[5] = opt->pen_clip3;
-				input_space[6] = opt->w;
-				*((int32_t*)(&input_space[8])) = *p_readNo;
-				fill_input_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->inputAddr, opt);
+			else {
+				// request TBB space for execution
+				batch* reservedBatch = reqTBBSpace();
+				if (reservedBatch == NULL) { // do it by CPU
+					int ori_idx;
+					for (ori_idx = start_read_idx-start; ori_idx <= batch_idx-1-start; ori_idx++)
+						if (param_batch[ori_idx].valid) original_extension(param_batch[ori_idx].reg, &param_batch[ori_idx], opt);
+					// after that, clean the space
+					filled_space = 32;
+					*p_readNo = 0;
+					start_read_idx = batch_idx;
+				}
+				else { // do it by FPGA
+					// fill input memory space
+					int8_t* input_space = (int8_t*)reservedBatch->inputAddr;
+					input_space[0] = opt->o_del;
+					input_space[1] = opt->e_del;
+					input_space[2] = opt->o_ins;
+					input_space[3] = opt->e_ins;
+					input_space[4] = opt->pen_clip5;
+					input_space[5] = opt->pen_clip3;
+					input_space[6] = opt->w;
+					*((int32_t*)(&input_space[8])) = *p_readNo;
+					fill_input_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->inputAddr, opt);
 
-				// let fpga do the task
-				// validate input and send conditional signal
-				pthread_mutex_lock(&batchListLock);
-				reservedBatch->inputValid = 1;
-				pthread_cond_signal(&inputReady);
-				//pthread_cond_signal(&reservedBatch->inputReady);
-				pthread_mutex_unlock(&batchListLock);
+					// let fpga do the task
+					// validate input and send conditional signal
+					pthread_mutex_lock(&batchListLock);
+					reservedBatch->inputValid = 1;
+					pthread_cond_signal(&inputReady);
+					//pthread_cond_signal(&reservedBatch->inputReady);
+					pthread_mutex_unlock(&batchListLock);
 
-				// retreive data from output memory space
-				// wait to get output ready signal
-				pthread_mutex_lock(&reservedBatch->batchNodeLock);
-				while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
-				pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-				printf("\n[debug] The output data of the batch is ready, with input address = %llx, and output address = %llx\n", reservedBatch->inputAddr, reservedBatch->outputAddr);
+					// retreive data from output memory space
+					// wait to get output ready signal
+					pthread_mutex_lock(&reservedBatch->batchNodeLock);
+					while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
+					pthread_mutex_unlock(&reservedBatch->batchNodeLock);
+					printf("\n[debug] The output data of the batch is ready, with input address = %llx, and output address = %llx\n", reservedBatch->inputAddr, reservedBatch->outputAddr);
 
-				// FIXME
-				retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
-				//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->outputAddr, opt);
-				// after that, clean the space
-				releaseBatchSpace(reservedBatch);
-				filled_space = 32;
-				*p_readNo = 0;
-				start_read_idx = batch_idx;
+					// FIXME
+					retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
+					//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->outputAddr, opt);
+					// after that, clean the space
+					releaseBatchSpace(reservedBatch);
+					filled_space = 32;
+					*p_readNo = 0;
+					start_read_idx = batch_idx;
+				}
 			}
 		}
 
