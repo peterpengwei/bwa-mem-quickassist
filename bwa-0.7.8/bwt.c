@@ -274,13 +274,23 @@ void kv_push_bwtintv_t(bwtintv_v *v, bwtintv_t ik)
 void bwt_forward_search_batched(smem_i **itr, int *x, bwtintv_v **curr, bwtintv_t *ik, bwtintv_t **ok, 
 		int *min_intv, int batch_size, const int *done)
 {
-	int batch_idx, i;
+	int batch_idx, i, gi;
 
-  for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
-    if (done[batch_idx])
-      continue;
+	int *local_done = (int *)malloc(sizeof(int) * batch_size);
+	memcpy(local_done, done, sizeof(int) * batch_size);
 
-    for (i = x[batch_idx] + 1, curr[batch_idx]->n = 0; i < itr[batch_idx]->len; ++i) { // forward search
+	for (batch_idx = 0; batch_idx < batch_size; ++batch_idx)
+		curr[batch_idx]->n = 0;
+
+	for (gi = 1; gi < itr[0]->len; ++gi) {
+		for (batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+	    if (local_done[batch_idx])
+  	    continue;
+
+			i = gi + x[batch_idx];
+			if (i >= itr[0]->len)
+				continue;
+
       if (itr[batch_idx]->query[i] < 4) { // an A/C/G/T base
         int c = 3 - itr[batch_idx]->query[i]; // complement of q[i]
 				bwtint_t tk[4], tl[4];
@@ -304,20 +314,26 @@ void bwt_forward_search_batched(smem_i **itr, int *x, bwtintv_v **curr, bwtintv_
 
         if (ok[batch_idx][c].x[2] != ik[batch_idx].x[2]) { // change of the interval size
           kv_push_bwtintv_t(curr[batch_idx], ik[batch_idx]);
-          if (ok[batch_idx][c].x[2] < min_intv[batch_idx])
-            break; // the interval size is too small to be extended further
+          if (ok[batch_idx][c].x[2] < min_intv[batch_idx]) {
+						local_done[batch_idx] = 1;
+            continue;
+					}
         }
         ik[batch_idx] = ok[batch_idx][c];
         ik[batch_idx].info = i + 1;
       } else { // an ambiguous base
         kv_push_bwtintv_t(curr[batch_idx], ik[batch_idx]);
-        break; // always terminate extension at an ambiguous base; in this case, i<len always stands
+				local_done[batch_idx] = 1;
+        continue;
       }
     }
-    if (i == itr[batch_idx]->len)
-      kv_push_bwtintv_t(curr[batch_idx], ik[batch_idx]); // push the last interval if we reach the end
   }	
 
+	for (i = 0; i < batch_size; ++i)
+    if (local_done[i] == 0)
+      kv_push_bwtintv_t(curr[i], ik[i]); // push the last interval if we reach the end
+
+	free(local_done);
 	return ;
 }
 
