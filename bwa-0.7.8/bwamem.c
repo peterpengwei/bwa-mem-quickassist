@@ -33,7 +33,7 @@
 #define INPUT_THRESHOLD 1024
 #define OUTPUT_SPACE_SIZE (1<<14)
 
-#define MIN_BATCH_SIZE 64
+#define MIN_BATCH_SIZE 128
 
 #include "batch.h"
 
@@ -1271,34 +1271,44 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, 
 	}
 }*/
 
-void retrieve_output_memory(const ext_param_t* param_batch, const int8_t* output_space, const int taskNum, int start) {
-	printf("\n[retrieve_output_memory] #task = %d, start = %d\n", taskNum, start);
-        int i;
-        int16_t* p_res = (int16_t*)output_space;
+void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space, const int taskNum, int start, int left_bound, int right_bound) {
+	if (bwa_verbose >= 4) printf("\n[retrieve_output_memory] #task = %d, start = %d\n", taskNum, start);
+    int i;
+    int16_t* p_res = (int16_t*)output_space;
 	int32_t cur_idx = -1;
-        for (i=0; i<taskNum; i++) {
+    for (i=0; i<taskNum; i++) {
 		cur_idx = *((int32_t*)(p_res));
 		cur_idx -= start;
-		printf ("[retrieve_output_memory] the index of the %d-th task is: %d\n", i, cur_idx);
-		assert (param_batch[cur_idx].valid);
-		p_res += 2;
-                param_batch[cur_idx].reg->qb = *p_res;
-                p_res++;
-                param_batch[cur_idx].reg->qe = *p_res + param_batch[cur_idx].qe_offset;
-                p_res++;
-                param_batch[cur_idx].reg->rb = *p_res + param_batch[cur_idx].rbeg_offset;
-                p_res++;
-                param_batch[cur_idx].reg->re = *p_res + param_batch[cur_idx].re_offset;
-                p_res++;
-                param_batch[cur_idx].reg->score = *p_res;
-                p_res++;
-                param_batch[cur_idx].reg->truesc = *p_res;
-                p_res++;
-                param_batch[cur_idx].reg->w = *p_res;
-                p_res++;
-                p_res++;
-        }
-		printf ("\n[retrieve_output_memory] finish retrieving\n");
+		if (cur_idx < left_bound || cur_idx > right_bound) {
+			printf("\n[debug] batch_idx %d with start %d and real index %d is out of bound (%d, %d)\n", cur_idx+start, start, cur_idx, left_bound, right_bound);
+			p_res += 10;
+		}
+		if (bwa_verbose >= 4) printf ("[retrieve_output_memory] the index of the %d-th task is: %d\n", i, cur_idx);
+		//assert (param_batch[cur_idx].valid);
+		if (param_batch[cur_idx].valid) {
+			p_res += 2;
+			param_batch[cur_idx].reg->qb = *p_res;
+			p_res++;
+			param_batch[cur_idx].reg->qe = *p_res + param_batch[cur_idx].qe_offset;
+			p_res++;
+			param_batch[cur_idx].reg->rb = *p_res + param_batch[cur_idx].rbeg_offset;
+			p_res++;
+			param_batch[cur_idx].reg->re = *p_res + param_batch[cur_idx].re_offset;
+			p_res++;
+			param_batch[cur_idx].reg->score = *p_res;
+			p_res++;
+			param_batch[cur_idx].reg->truesc = *p_res;
+			p_res++;
+			param_batch[cur_idx].reg->w = *p_res;
+			p_res++;
+			p_res++;
+		}
+		else {
+			printf("\n[debug] batch_idx %d with start %d and real index %d is not valid\n", cur_idx+start, start, cur_idx);
+			p_res += 10;
+		}
+    }
+	if (bwa_verbose >= 4) printf ("\n[retrieve_output_memory] finish retrieving\n");
 }
 
 /*
@@ -1354,7 +1364,7 @@ void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const
 	int i,j;
 	int param_idx = 0;
 	int numOfReads = *((int*)(input_space+8));
-	printf("\n[fill_input_memory] #task = %d\n", numOfReads);
+	if (bwa_verbose >= 4) printf("[fill_input_memory] #task = %d\n", numOfReads);
 	int8_t* p_param = input_space + 32; 
 	int8_t* p_string = input_space + 32 + 32 * numOfReads;
 	int32_t offset = 8 + numOfReads * 8;
@@ -1383,7 +1393,7 @@ void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const
 			*((int16_t*)(&p_param[24])) = rightMaxIns;
 			*((int16_t*)(&p_param[26])) = rightMaxDel;
 			*((int32_t*)(&p_param[28])) = param_batch[i].idx;
-			printf("\n[fill_input_memory] the %d-th param has index: %d\n", i, param_batch[i].idx);
+			if (bwa_verbose >= 4) printf("[fill_input_memory] the %d-th param has index: %d\n", i, param_batch[i].idx);
 
 			int bp_num = 0;
 			uint32_t* bp_val = (uint32_t*)p_string;
@@ -1418,6 +1428,7 @@ void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const
 	assert(numOfReads == param_idx);
 }
 
+/*
 void sw_extend(unsigned short qs_baddr, int *qs, unsigned short ts_baddr, short qlen, short tlen, char o_ins,
 			   char e_ins, char o_del, char e_del, char penClip, char w_in, char h0, short *regScore, short qBeg, short max_ins, short max_del,
 			   short *w_ret, short *qle_ret, short *tle_ret, short *gtle_ret, short *gscore_ret, short *maxoff_ret)
@@ -1625,7 +1636,9 @@ query_loop : for (j = beg; j < end; ++j) {
 				 *w_ret = aw_tmp;
 				 //	*score = max;
 }
+*/
 
+/*
 void extension(int8_t* input_space, int8_t* output_space)
 {   
 	int * a; //cmost_malloc_1d( &a, "total_input.dat" , 4, 409600);
@@ -1900,6 +1913,7 @@ left_right_loop : for (i=0; i<2; i++)
 #pragma cmost task_end
 #pragma cmost graph_end
 }
+*/
 
 typedef struct {
 	int chn_idx;
@@ -2055,7 +2069,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 							pthread_mutex_lock(&reservedBatch->batchNodeLock);
 							while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
 							pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-							retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
+							retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start, start_read_idx-start, batch_idx-start);
 							//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->outputAddr, opt);
 							// after that, clean the space
 							releaseBatchSpace(reservedBatch);
@@ -2135,10 +2149,10 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 					pthread_mutex_lock(&reservedBatch->batchNodeLock);
 					while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
 					pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-					printf("\n[debug] The output data of the batch is ready, with input address = %llx, and output address = %llx\n", reservedBatch->inputAddr, reservedBatch->outputAddr);
+					//printf("\n[debug] The output data of the batch is ready, with input address = %llx, and output address = %llx\n", reservedBatch->inputAddr, reservedBatch->outputAddr);
 
 					// FIXME
-					retrieve_output_memory(param_batch, (int16_t*)reservedBatch->outputAddr, *p_readNo, start);
+					retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start, start_read_idx-start, batch_idx-1-start);
 					//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->outputAddr, opt);
 					// after that, clean the space
 					releaseBatchSpace(reservedBatch);

@@ -68,5 +68,5 @@ $(CCOBJECTS): %.o: %.cc
 	gcc -c -x c++ $(CXXFLAGS) -o $@ $<
 
 clean:
-	rm -f *.o $(TARGET)
+	rm -rf *.o $(TARGET) .libs/
 

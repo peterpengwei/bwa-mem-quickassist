@@ -253,7 +253,7 @@ execution_fpga(void* data)
         rc = pthread_mutex_unlock(&batchListLock);
 
         cout << "[" << cur_batch->idx << "] ";
-        cout << "Batch (" << *(btUnsigned32bitInt *)cur_batch->inputAddr << ") dispatched to FPGA" << endl;
+        cout << "Batch (" << *(btUnsigned32bitInt *)(cur_batch->inputAddr + 8) << ") dispatched to FPGA" << endl;
 
         request_pearray[cur_batch->idx] = 1;
 
@@ -288,7 +288,6 @@ collection_fpga(void* data)
     }
 
     while (true) {
-	cout << "[collection_fpga] start of the infinite while loop" << endl;
         while ( pre_status == *StatusAddr ) {
             usleep(100);
         }
