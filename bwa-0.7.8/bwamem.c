@@ -33,7 +33,7 @@
 #define INPUT_THRESHOLD 1024
 #define OUTPUT_SPACE_SIZE (1<<14)
 
-#define MIN_BATCH_SIZE 128
+#define MIN_BATCH_SIZE 64
 
 #include "batch.h"
 
@@ -1281,7 +1281,10 @@ void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space
 		cur_idx -= start;
 		if (cur_idx < left_bound || cur_idx > right_bound) {
 			printf("\n[debug] batch_idx %d with start %d and real index %d is out of bound (%d, %d)\n", cur_idx+start, start, cur_idx, left_bound, right_bound);
+			printf("the index of the %d-th task is: %d\n", i, cur_idx);
+			assert(0);
 			p_res += 10;
+			continue;
 		}
 		if (bwa_verbose >= 4) printf ("[retrieve_output_memory] the index of the %d-th task is: %d\n", i, cur_idx);
 		//assert (param_batch[cur_idx].valid);
@@ -1305,6 +1308,8 @@ void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space
 		}
 		else {
 			printf("\n[debug] batch_idx %d with start %d and real index %d is not valid\n", cur_idx+start, start, cur_idx);
+			printf("the index of the %d-th task is: %d\n", i, cur_idx);
+			assert(0);
 			p_res += 10;
 		}
     }
@@ -2152,6 +2157,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 					//printf("\n[debug] The output data of the batch is ready, with input address = %llx, and output address = %llx\n", reservedBatch->inputAddr, reservedBatch->outputAddr);
 
 					// FIXME
+					printf("[%d] retrieving memory ... \n", reservedBatch->idx);
 					retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start, start_read_idx-start, batch_idx-1-start);
 					//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->outputAddr, opt);
 					// after that, clean the space

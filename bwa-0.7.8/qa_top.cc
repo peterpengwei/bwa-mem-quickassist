@@ -253,7 +253,7 @@ execution_fpga(void* data)
         rc = pthread_mutex_unlock(&batchListLock);
 
         cout << "[" << cur_batch->idx << "] ";
-        cout << "Batch (" << *(btUnsigned32bitInt *)(cur_batch->inputAddr + 8) << ") dispatched to FPGA" << endl;
+        cout << "Batch (" << *(btUnsigned32bitInt *)(((int8_t*)cur_batch->inputAddr) + 8) << ") dispatched to FPGA" << endl;
 
         request_pearray[cur_batch->idx] = 1;
 
