@@ -1271,11 +1271,29 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, 
 	}
 }*/
 
+int cmp_func(const void* a, const void* b) {
+	return *(int32_t*)a - *(int32_t*)b;
+}
+
 void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space, const int taskNum, int start, int left_bound, int right_bound) {
+	sleep (10); // Wait for 10 seconds to finish all the writes
 	if (bwa_verbose >= 4) printf("\n[retrieve_output_memory] #task = %d, start = %d\n", taskNum, start);
     int i;
     int16_t* p_res = (int16_t*)output_space;
 	int32_t cur_idx = -1;
+
+	int32_t* indices = (int32_t*)malloc(sizeof(int32_t)*taskNum);
+	for (i=0; i<taskNum; i++) {
+		indices[i] = *((int32_t*)(output_space+i*20));
+	}
+	qsort(indices, taskNum, sizeof(int32_t), cmp_func);	
+	printf("\n");
+	for (i=0; i<taskNum; i++) {
+		printf("[retrieve_output_memory] the %d-th index is %d\n", i, indices[i]);
+	}
+
+	free (indices);
+
     for (i=0; i<taskNum; i++) {
 		cur_idx = *((int32_t*)(p_res));
 		cur_idx -= start;
@@ -1365,7 +1383,7 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int16_t* outpu
 }
 */
 
-void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const int batch_idx, int8_t* input_space, const mem_opt_t* opt) {
+void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const int batch_idx, int8_t* input_space, const mem_opt_t* opt, int start) {
 	int i,j;
 	int param_idx = 0;
 	int numOfReads = *((int*)(input_space+8));
@@ -1398,7 +1416,8 @@ void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const
 			*((int16_t*)(&p_param[24])) = rightMaxIns;
 			*((int16_t*)(&p_param[26])) = rightMaxDel;
 			*((int32_t*)(&p_param[28])) = param_batch[i].idx;
-			if (bwa_verbose >= 4) printf("[fill_input_memory] the %d-th param has index: %d\n", i, param_batch[i].idx);
+			printf("[fill_input_memory] the %d-th param has index: %d\n", i, param_batch[i].idx);
+			assert (i + start == param_batch[i].idx);
 
 			int bp_num = 0;
 			uint32_t* bp_val = (uint32_t*)p_string;
@@ -2059,7 +2078,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 							input_space[5] = opt->pen_clip3;
 							input_space[6] = opt->w;
 							*((int32_t*)(&input_space[8])) = *p_readNo;
-							fill_input_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->inputAddr, opt);
+							fill_input_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->inputAddr, opt, start);
 
 							// let fpga do the task
 							// validate input and send conditional signal
@@ -2139,7 +2158,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 					input_space[5] = opt->pen_clip3;
 					input_space[6] = opt->w;
 					*((int32_t*)(&input_space[8])) = *p_readNo;
-					fill_input_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->inputAddr, opt);
+					fill_input_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->inputAddr, opt, start);
 
 					// let fpga do the task
 					// validate input and send conditional signal
