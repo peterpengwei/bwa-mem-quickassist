@@ -309,6 +309,10 @@ collection_fpga(void* data)
                 cout << "PEarray starts to work. Updating request vector." << endl;
             } else if (pre_pearray_busy[k] == 1 && cur_pearray_busy[k] == 0) {
                 rc = pthread_mutex_lock(&bat[k].batchNodeLock);
+				int t_tasknum = *(int32_t*)(bat[k].inputAddr+8);
+				int t_idx = -1;
+				printf("\n");
+				for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[collection_fpga] idx = %d\n", *(int32_t*)(bat[k].outputAddr+20*t_idx));
                 bat[k].outputValid = 1;
                 pthread_cond_signal(&bat[k].outputReady);
                 rc = pthread_mutex_unlock(&bat[k].batchNodeLock);

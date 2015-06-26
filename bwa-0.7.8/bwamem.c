@@ -1276,7 +1276,7 @@ int cmp_func(const void* a, const void* b) {
 }
 
 void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space, const int taskNum, int start, int left_bound, int right_bound) {
-	sleep (10); // Wait for 10 seconds to finish all the writes
+	//sleep (10); // Wait for 10 seconds to finish all the writes
 	if (bwa_verbose >= 4) printf("\n[retrieve_output_memory] #task = %d, start = %d\n", taskNum, start);
     int i;
     int16_t* p_res = (int16_t*)output_space;
@@ -1291,6 +1291,7 @@ void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space
 	for (i=0; i<taskNum; i++) {
 		printf("[retrieve_output_memory] the %d-th index is %d\n", i, indices[i]);
 	}
+	for (i=left_bound; i<=right_bound; i++) if (param_batch[i].valid) printf("[valid_idx] idx=%d\n", i);
 
 	free (indices);
 
@@ -2172,6 +2173,12 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 					// wait to get output ready signal
 					pthread_mutex_lock(&reservedBatch->batchNodeLock);
 					while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
+				    int t_tasknum = *(int32_t*)(reservedBatch->inputAddr+8);
+				    int t_idx = -1;
+				    printf("\n");
+				    for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[inside lock input] input idx = %d\n", *(int32_t*)(reservedBatch->inputAddr+32+32*t_idx+28));
+				    printf("\n");
+				    for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[inside lock output] output idx = %d\n", *(int32_t*)(reservedBatch->outputAddr+20*t_idx));
 					pthread_mutex_unlock(&reservedBatch->batchNodeLock);
 					//printf("\n[debug] The output data of the batch is ready, with input address = %llx, and output address = %llx\n", reservedBatch->inputAddr, reservedBatch->outputAddr);
 
