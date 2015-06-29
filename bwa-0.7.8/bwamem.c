@@ -741,6 +741,12 @@ void ref_extension(mem_alnreg_t reg, const mem_alnreg_t* reg_dut, const ext_para
 		}
 	} 
 	a->w = aw[0] > aw[1]? aw[0] : aw[1];
+	printf("qb: %d vs %d\n", reg_dut->qb, a->qb);
+	printf("rb: %d vs %d\n", reg_dut->rb, a->rb);
+	printf("qe: %d vs %d\n", reg_dut->qe, a->qe);
+	printf("re: %d vs %d\n", reg_dut->re, a->re);
+	printf("score: %d vs %d\n", reg_dut->score, a->score);
+	printf("truesc: %d vs %d\n", reg_dut->truesc, a->truesc);
 	assert(reg_dut->qb == a->qb);
 	assert(reg_dut->qe == a->qe);
 	assert(reg_dut->rb == a->rb);
@@ -1271,43 +1277,43 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, 
 	}
 }*/
 
-int cmp_func(const void* a, const void* b) {
-	return *(int32_t*)a - *(int32_t*)b;
-}
+//int cmp_func(const void* a, const void* b) {
+//	return *(int32_t*)a - *(int32_t*)b;
+//}
 
-void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space, const int taskNum, int start, int left_bound, int right_bound) {
-	//sleep (10); // Wait for 10 seconds to finish all the writes
+void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space, const int taskNum, int start, int left_bound, int right_bound, mem_opt_t* opt) {
 	if (bwa_verbose >= 4) printf("\n[retrieve_output_memory] #task = %d, start = %d\n", taskNum, start);
     int i;
     int16_t* p_res = (int16_t*)output_space;
-	int32_t cur_idx = -1;
+    int32_t cur_idx = -1;
 
-	int32_t* indices = (int32_t*)malloc(sizeof(int32_t)*taskNum);
-	for (i=0; i<taskNum; i++) {
-		indices[i] = *((int32_t*)(output_space+i*20));
-	}
-	qsort(indices, taskNum, sizeof(int32_t), cmp_func);	
-	printf("\n");
-	for (i=0; i<taskNum; i++) {
-		printf("[retrieve_output_memory] the %d-th index is %d\n", i, indices[i]);
-	}
-	for (i=left_bound; i<=right_bound; i++) if (param_batch[i].valid) printf("[valid_idx] idx=%d\n", i);
+	//int32_t* indices = (int32_t*)malloc(sizeof(int32_t)*taskNum);
+	//for (i=0; i<taskNum; i++) {
+	//	indices[i] = *((int32_t*)(output_space+i*20));
+	//}
+	//qsort(indices, taskNum, sizeof(int32_t), cmp_func);	
+	//printf("\n");
+	//for (i=0; i<taskNum; i++) {
+	//	printf("[retrieve_output_memory] the %d-th index is %d\n", i, indices[i]);
+	//}
+	//for (i=left_bound; i<=right_bound; i++) if (param_batch[i].valid) printf("[valid_idx] idx=%d\n", i);
 
-	free (indices);
+	//free (indices);
 
     for (i=0; i<taskNum; i++) {
 		cur_idx = *((int32_t*)(p_res));
 		cur_idx -= start;
 		if (cur_idx < left_bound || cur_idx > right_bound) {
 			printf("\n[debug] batch_idx %d with start %d and real index %d is out of bound (%d, %d)\n", cur_idx+start, start, cur_idx, left_bound, right_bound);
-			printf("the index of the %d-th task is: %d\n", i, cur_idx);
-			assert(0);
+			//printf("the index of the %d-th task is: %d\n", i, cur_idx);
+			//assert(0);
 			p_res += 10;
 			continue;
 		}
 		if (bwa_verbose >= 4) printf ("[retrieve_output_memory] the index of the %d-th task is: %d\n", i, cur_idx);
 		//assert (param_batch[cur_idx].valid);
 		if (param_batch[cur_idx].valid) {
+			mem_alnreg_t ref_reg = *(param_batch[cur_idx].reg);
 			p_res += 2;
 			param_batch[cur_idx].reg->qb = *p_res;
 			p_res++;
@@ -1324,11 +1330,12 @@ void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space
 			param_batch[cur_idx].reg->w = *p_res;
 			p_res++;
 			p_res++;
+			ref_extension(ref_reg, param_batch[cur_idx].reg, &param_batch[cur_idx], opt);
 		}
 		else {
 			printf("\n[debug] batch_idx %d with start %d and real index %d is not valid\n", cur_idx+start, start, cur_idx);
-			printf("the index of the %d-th task is: %d\n", i, cur_idx);
-			assert(0);
+			//printf("the index of the %d-th task is: %d\n", i, cur_idx);
+			//assert(0);
 			p_res += 10;
 		}
     }
@@ -1417,7 +1424,7 @@ void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const
 			*((int16_t*)(&p_param[24])) = rightMaxIns;
 			*((int16_t*)(&p_param[26])) = rightMaxDel;
 			*((int32_t*)(&p_param[28])) = param_batch[i].idx;
-			printf("[fill_input_memory] the %d-th param has index: %d\n", i, param_batch[i].idx);
+			//printf("[fill_input_memory] the %d-th param has index: %d\n", i, param_batch[i].idx);
 			assert (i + start == param_batch[i].idx);
 
 			int bp_num = 0;
@@ -1453,7 +1460,6 @@ void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const
 	assert(numOfReads == param_idx);
 }
 
-/*
 void sw_extend(unsigned short qs_baddr, int *qs, unsigned short ts_baddr, short qlen, short tlen, char o_ins,
 			   char e_ins, char o_del, char e_del, char penClip, char w_in, char h0, short *regScore, short qBeg, short max_ins, short max_del,
 			   short *w_ret, short *qle_ret, short *tle_ret, short *gtle_ret, short *gscore_ret, short *maxoff_ret)
@@ -1661,9 +1667,7 @@ query_loop : for (j = beg; j < end; ++j) {
 				 *w_ret = aw_tmp;
 				 //	*score = max;
 }
-*/
 
-/*
 void extension(int8_t* input_space, int8_t* output_space)
 {   
 	int * a; //cmost_malloc_1d( &a, "total_input.dat" , 4, 409600);
@@ -1938,7 +1942,6 @@ left_right_loop : for (i=0; i<2; i++)
 #pragma cmost task_end
 #pragma cmost graph_end
 }
-*/
 
 typedef struct {
 	int chn_idx;
@@ -2094,7 +2097,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 							pthread_mutex_lock(&reservedBatch->batchNodeLock);
 							while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
 							pthread_mutex_unlock(&reservedBatch->batchNodeLock);
-							retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start, start_read_idx-start, batch_idx-start);
+							retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start, start_read_idx-start, batch_idx-start, opt);
 							//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-start, (int8_t*)reservedBatch->outputAddr, opt);
 							// after that, clean the space
 							releaseBatchSpace(reservedBatch);
@@ -2173,18 +2176,18 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 					// wait to get output ready signal
 					pthread_mutex_lock(&reservedBatch->batchNodeLock);
 					while (!reservedBatch->outputValid) pthread_cond_wait(&reservedBatch->outputReady, &reservedBatch->batchNodeLock);
-				    int t_tasknum = *(int32_t*)(reservedBatch->inputAddr+8);
-				    int t_idx = -1;
-				    printf("\n");
-				    for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[inside lock input] input idx = %d\n", *(int32_t*)(reservedBatch->inputAddr+32+32*t_idx+28));
-				    printf("\n");
-				    for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[inside lock output] output idx = %d\n", *(int32_t*)(reservedBatch->outputAddr+20*t_idx));
+				    //int t_tasknum = *(int32_t*)(reservedBatch->inputAddr+8);
+				    //int t_idx = -1;
+				    //printf("\n");
+				    //for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[inside lock input] input idx = %d\n", *(int32_t*)(reservedBatch->inputAddr+32+32*t_idx+28));
+				    //printf("\n");
+				    //for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[inside lock output] output idx = %d\n", *(int32_t*)(reservedBatch->outputAddr+20*t_idx));
 					pthread_mutex_unlock(&reservedBatch->batchNodeLock);
 					//printf("\n[debug] The output data of the batch is ready, with input address = %llx, and output address = %llx\n", reservedBatch->inputAddr, reservedBatch->outputAddr);
 
 					// FIXME
-					printf("[%d] retrieving memory ... \n", reservedBatch->idx);
-					retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start, start_read_idx-start, batch_idx-1-start);
+					//printf("[%d] retrieving memory ... \n", reservedBatch->idx);
+					retrieve_output_memory(param_batch, (int8_t*)reservedBatch->outputAddr, *p_readNo, start, start_read_idx-start, batch_idx-1-start, opt);
 					//retrieve_output_memory(param_batch, start_read_idx-start, batch_idx-1-start, (int8_t*)reservedBatch->outputAddr, opt);
 					// after that, clean the space
 					releaseBatchSpace(reservedBatch);
@@ -2404,6 +2407,7 @@ static void worker1_batched(void *data, int start, int batch_size, int tid)
 {
 	worker_t *w = (worker_t*)data;
 	mem_alnreg_v* ret = mem_align1_core_batched(w->opt, w->bwt, w->bns, w->pac, w->seqs, start, batch_size);
+	printf("[worker1_batched] Get the result of mem_align1_core_batched\n");
 	int i = -1;
 	for (i=start; i<start+batch_size; i++) {
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);

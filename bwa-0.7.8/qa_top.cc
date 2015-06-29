@@ -260,7 +260,7 @@ execution_fpga(void* data)
         int request_vector = 0;
         for (int k = 0; k < BWA_NUM_BATCHES; k++)
             request_vector |= ( request_pearray[k] << k );
-        show_req_vector();
+        // show_req_vector();
 
         // pCCIDevice->SetCSR(CSR_NUM_LINES, 1);
         pCCIDevice->SetCSR(CSR_REQ_PEARRAY, request_vector);
@@ -295,7 +295,7 @@ collection_fpga(void* data)
         pre_status = *StatusAddr;
 
         cout << endl << "FPGA STATUS CHANGED ";
-        show_status(pre_status);
+        // show_status(pre_status);
 
         for (int k = 0; k < BWA_NUM_BATCHES; k++) {
             cur_pearray_busy[k] = (pre_status >> k) & 1;
@@ -309,10 +309,10 @@ collection_fpga(void* data)
                 cout << "PEarray starts to work. Updating request vector." << endl;
             } else if (pre_pearray_busy[k] == 1 && cur_pearray_busy[k] == 0) {
                 rc = pthread_mutex_lock(&bat[k].batchNodeLock);
-				int t_tasknum = *(int32_t*)(bat[k].inputAddr+8);
-				int t_idx = -1;
-				printf("\n");
-				for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[collection_fpga] idx = %d\n", *(int32_t*)(bat[k].outputAddr+20*t_idx));
+//				int t_tasknum = *(int32_t*)(bat[k].inputAddr+8);
+//				int t_idx = -1;
+//				printf("\n");
+//				for (t_idx = 0; t_idx < t_tasknum; t_idx++) printf("[collection_fpga] idx = %d\n", *(int32_t*)(bat[k].outputAddr+20*t_idx));
                 bat[k].outputValid = 1;
                 pthread_cond_signal(&bat[k].outputReady);
                 rc = pthread_mutex_unlock(&bat[k].batchNodeLock);
@@ -329,7 +329,7 @@ collection_fpga(void* data)
             int request_vector = 0;
             for (int k = 0; k < BWA_NUM_BATCHES; k++)
                 request_vector |= ( request_pearray[k] << k );
-            show_req_vector();
+            // show_req_vector();
 
             // update the request vector
             pCCIDevice->SetCSR(CSR_REQ_PEARRAY, request_vector);
@@ -469,19 +469,21 @@ int main(int argc, char *argv[])
     pthread_create(&col_thread, NULL, collection_fpga, (void*) pCCIDevice);
 
     /* skip the first command */
+    cout << "Start running bwa_main" << endl;
     bwa_main(argc - 1, argv + 1);
+    cout << "Finish running bwa_main" << endl;
 
-    batch* p = NULL;
-    while (batchListDummyHead) {
-        p = batchListDummyHead;
-        batchListDummyHead = batchListDummyHead->next;
-        delete p;
-    }
-    while (freeListDummyHead) {
-        p = freeListDummyHead;
-        freeListDummyHead = freeListDummyHead->next;
-        delete p;
-    }
+    //batch* p = NULL;
+    //while (batchListDummyHead) {
+    //    p = batchListDummyHead;
+    //    batchListDummyHead = batchListDummyHead->next;
+    //    delete p;
+    //}
+    //while (freeListDummyHead) {
+    //    p = freeListDummyHead;
+    //    freeListDummyHead = freeListDummyHead->next;
+    //    delete p;
+    //}
 
     // Stop the device
     pCCIDevice->SetCSR(CSR_CTL,      0x7);
