@@ -2,25 +2,25 @@
 
 # New pipeline as of 2013-10-22.
 
-ROOT=/cdsc_nfs/cdsc0/software/spark
-BWA=/curr/haoyc/bwa-mem-quickassist/bwa-0.7.8/bwa
+ROOT=/home/quickassist
+#BWA=/home/quickassist/bwa-mem-quickassist/bwa-0.7.8/bwa
+BWA=/home/quickassist/bwa-0.7.8/bwa
 #BWA=$ROOT/bwa-0.7.8/bwa
 #SAMTOOLS=$ROOT/samtools-0.1.19/samtools
 #PICARD=$ROOT/picard-tools-1.79
 #GATK=$ROOT/gatk-protected-master/dist/GenomeAnalysisTK.jar
 
-REF=$ROOT/genomics_data/ReferenceMetadata
+REF=$ROOT/genomics/ReferenceMetadata
 FASTA=$REF/human_g1k_v37.fasta
 FAI=$FASTA.fai
 DBSNP=$REF/dbsnp-all.vcf
 DBINDEL=$REF/1000G_phase1.indels.b37.vcf
-IDIR=$ROOT/genomics_data
+IDIR=$ROOT/genomics/InputFiles
 INFILE=HCC1954
-# ODIR=$ROOT/genomics_data
-ODIR=/curr/haoyc
+ODIR=$ROOT/genomics/InputFiles
 NTHREAD=4
 NCTHREAD=4
-NBATCH_SIZE=512
+NBATCH_SIZE=800
 
 HDR=`printf "'@RG\tID:%s\tLB:%s\tSM:%s'" $INFILE $INFILE $INFILE`
 #IN1=$IDIR/${INFILE}_1_100reads.fq
@@ -70,8 +70,9 @@ WRAPPER() {
 
 # Align sequences with BWA
 #WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
-#WRAPPER "bwamem" "$BWA --target=ASE mem -t $NTHREAD -b $NBATCH_SIZE -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
-WRAPPER "bwamem" "$BWA --target=ASE mem -t $NTHREAD -b $NBATCH_SIZE -Ma -R $HDR $FASTA $IN1"
+WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
+#WRAPPER "bwamem" "$BWA --target=DIRECT mem -t $NTHREAD -b $NBATCH_SIZE -Ma -R $HDR $FASTA $IN1 > $SAMFILE"
+#WRAPPER "bwamem" "$BWA --target=DIRECT mem -t $NTHREAD -b $NBATCH_SIZE -Ma -R $HDR $FASTA $IN1"
 ##WRAPPER "bwamem" "$BWA mem -t $NTHREAD -Ma -R $HDR $FASTA $IN1 $IN2 > $SAMFILE"
 ##
 ### Convert SAM to BAM

@@ -33,7 +33,7 @@
 #define INPUT_THRESHOLD 1024
 #define OUTPUT_SPACE_SIZE (1<<14)
 
-#define MIN_BATCH_SIZE 64
+#define MIN_BATCH_SIZE 100
 
 #include "batch.h"
 
@@ -1282,7 +1282,7 @@ void retrieve_output_memory(const ext_param_t* param_batch, const int left_idx, 
 //}
 
 void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space, const int taskNum, int start, int left_bound, int right_bound, mem_opt_t* opt) {
-	if (bwa_verbose >= 4) printf("\n[retrieve_output_memory] #task = %d, start = %d\n", taskNum, start);
+	//printf("\n[retrieve_output_memory] #task = %d, bound = (%d, %d)\n", taskNum, left_bound, right_bound);
     int i;
     int16_t* p_res = (int16_t*)output_space;
     int32_t cur_idx = -1;
@@ -1330,7 +1330,7 @@ void retrieve_output_memory(const ext_param_t* param_batch, int8_t* output_space
 			param_batch[cur_idx].reg->w = *p_res;
 			p_res++;
 			p_res++;
-			ref_extension(ref_reg, param_batch[cur_idx].reg, &param_batch[cur_idx], opt);
+			//ref_extension(ref_reg, param_batch[cur_idx].reg, &param_batch[cur_idx], opt);
 		}
 		else {
 			printf("\n[debug] batch_idx %d with start %d and real index %d is not valid\n", cur_idx+start, start, cur_idx);
@@ -1395,7 +1395,7 @@ void fill_input_memory(const ext_param_t* param_batch, const int left_idx, const
 	int i,j;
 	int param_idx = 0;
 	int numOfReads = *((int*)(input_space+8));
-	if (bwa_verbose >= 4) printf("[fill_input_memory] #task = %d\n", numOfReads);
+	//printf("[fill_input_memory] #task = %d, bound = (%d, %d)\n", numOfReads, left_idx+start, batch_idx+start);
 	int8_t* p_param = input_space + 32; 
 	int8_t* p_string = input_space + 32 + 32 * numOfReads;
 	int32_t offset = 8 + numOfReads * 8;
@@ -2090,6 +2090,7 @@ mem_alnreg_v* mem_align1_core_batched(const mem_opt_t *opt, const bwt_t *bwt, co
 							reservedBatch->inputValid = 1;
 							pthread_cond_signal(&inputReady);
 							//pthread_cond_signal(&reservedBatch->inputReady);
+							assert (reservedBatch->inputValid == 1 && reservedBatch->outputValid == 0);
 							pthread_mutex_unlock(&batchListLock);
 
 							// retreive data from output memory space
@@ -2407,7 +2408,6 @@ static void worker1_batched(void *data, int start, int batch_size, int tid)
 {
 	worker_t *w = (worker_t*)data;
 	mem_alnreg_v* ret = mem_align1_core_batched(w->opt, w->bwt, w->bns, w->pac, w->seqs, start, batch_size);
-	printf("[worker1_batched] Get the result of mem_align1_core_batched\n");
 	int i = -1;
 	for (i=start; i<start+batch_size; i++) {
 		if (bwa_verbose >= 4) printf("=====> Processing read '%s' <=====\n", w->seqs[i].name);

@@ -118,6 +118,7 @@ batch* freeListTail = NULL;
 batch  bat[BWA_NUM_BATCHES];
 
 int request_pearray[BWA_NUM_BATCHES];
+// pthread_mutex_t req_vec_lock = PTHREAD_MUTEX_INITIALIZER;
 
 volatile bt32bitCSR *StatusAddr;
 
@@ -145,6 +146,7 @@ reqTBBSpace()
 
         // 1st: remove one node from the free list
         p_newBatch = freeListDummyHead->next;
+        //printf ("inputValid = %d, outputValid = %d\n", p_newBatch->inputValid, p_newBatch->outputValid);
 	// cond 1: there is only one node, meaning the tail should be modified
 	if (p_newBatch == freeListTail) {
 		freeListDummyHead->next = NULL;
@@ -166,6 +168,7 @@ reqTBBSpace()
 	p_newBatch->prev = batchListTail;
 	p_newBatch->next = NULL;
 	batchListTail = p_newBatch;
+	assert (p_newBatch->inputValid == 0 && p_newBatch->outputValid == 0);
 	rc = pthread_mutex_unlock(&batchListLock);
     }
 
@@ -216,7 +219,7 @@ execution_fpga(void* data)
     // char* exe_message = (char*) data;
     //printf ("Start running the execution_fpga thread with message: %s\n", exe_message);
 
-    cout << "Start running the execution thread." << endl;
+    //cout << "Start running the execution thread." << endl;
 
     ICCIDevice *pCCIDevice = (ICCIDevice*) data;
 
@@ -252,8 +255,8 @@ execution_fpga(void* data)
         }
         rc = pthread_mutex_unlock(&batchListLock);
 
-        cout << "[" << cur_batch->idx << "] ";
-        cout << "Batch (" << *(btUnsigned32bitInt *)(((int8_t*)cur_batch->inputAddr) + 8) << ") dispatched to FPGA" << endl;
+        //cout << "[" << cur_batch->idx << "] ";
+        //cout << "Batch (" << *(btUnsigned32bitInt *)(((int8_t*)cur_batch->inputAddr) + 8) << ") dispatched to FPGA" << endl;
 
         request_pearray[cur_batch->idx] = 1;
 
@@ -272,7 +275,8 @@ execution_fpga(void* data)
 void*
 collection_fpga(void* data)
 {
-    cout << "Start running the collection thread." << endl;
+    //sleep (10);
+    //cout << "Start running the collection thread." << endl;
 
     ICCIDevice *pCCIDevice = (ICCIDevice*) data;
 
@@ -289,24 +293,23 @@ collection_fpga(void* data)
 
     while (true) {
         while ( pre_status == *StatusAddr ) {
-            usleep(100);
+            usleep(1);
         }
 
         pre_status = *StatusAddr;
 
-        cout << endl << "FPGA STATUS CHANGED ";
+        //cout << endl << "FPGA STATUS CHANGED ";
         // show_status(pre_status);
 
         for (int k = 0; k < BWA_NUM_BATCHES; k++) {
             cur_pearray_busy[k] = (pre_status >> k) & 1;
-            // cout << cur_pearray_busy[k];
 
             if (pre_pearray_busy[k] == 0 && cur_pearray_busy[k] == 1) {
                 request_pearray[k] = 0;     // no race condition with the exe thread
                 request_updtd = false;
 
-                cout << "[" << k << "] ";
-                cout << "PEarray starts to work. Updating request vector." << endl;
+                //cout << "[" << k << "] ";
+                //cout << "PEarray starts to work. Updating request vector." << endl;
             } else if (pre_pearray_busy[k] == 1 && cur_pearray_busy[k] == 0) {
                 rc = pthread_mutex_lock(&bat[k].batchNodeLock);
 //				int t_tasknum = *(int32_t*)(bat[k].inputAddr+8);
@@ -317,8 +320,8 @@ collection_fpga(void* data)
                 pthread_cond_signal(&bat[k].outputReady);
                 rc = pthread_mutex_unlock(&bat[k].batchNodeLock);
 
-                cout << "[" << k << "] ";
-                cout << "PEarray finished processing. Releasing current batch." << "with input address = " << bat[k].inputAddr << ", and output address =" << bat[k].outputAddr << endl;
+                //cout << "[" << k << "] ";
+                //cout << "PEarray finished processing. Releasing current batch." << "with input address = " << bat[k].inputAddr << ", and output address =" << bat[k].outputAddr << endl;
             }
 
             pre_pearray_busy[k] = cur_pearray_busy[k];
@@ -463,15 +466,16 @@ int main(int argc, char *argv[])
         freeListTail->batchNodeLock = PTHREAD_MUTEX_INITIALIZER;
     }
 
+    //sleep (10);
     pthread_t exe_thread;
     pthread_t col_thread;
     pthread_create(&exe_thread, NULL, execution_fpga,  (void*) pCCIDevice);
     pthread_create(&col_thread, NULL, collection_fpga, (void*) pCCIDevice);
 
     /* skip the first command */
-    cout << "Start running bwa_main" << endl;
+    //cout << "Start running bwa_main" << endl;
     bwa_main(argc - 1, argv + 1);
-    cout << "Finish running bwa_main" << endl;
+    //cout << "Finish running bwa_main" << endl;
 
     //batch* p = NULL;
     //while (batchListDummyHead) {
@@ -489,15 +493,15 @@ int main(int argc, char *argv[])
     pCCIDevice->SetCSR(CSR_CTL,      0x7);
 
     // Release the Workspaces
-    pCCIDevice->FreeWorkspace(pInputWorkspace);
-    pCCIDevice->FreeWorkspace(pOutputWorkspace);
-    pCCIDevice->FreeWorkspace(pDSMWorkspace);
+    //pCCIDevice->FreeWorkspace(pInputWorkspace);
+    //pCCIDevice->FreeWorkspace(pOutputWorkspace);
+    //pCCIDevice->FreeWorkspace(pDSMWorkspace);
 
-    // Release the CCI Device instance.
-    pCCIDevFactory->DestroyCCIDevice(pCCIDevice);
+    //// Release the CCI Device instance.
+    //pCCIDevFactory->DestroyCCIDevice(pCCIDevice);
 
     // Release the CCI Device Factory instance.
-    delete pCCIDevFactory;
+    //delete pCCIDevFactory;
 
     return 0;
 }
